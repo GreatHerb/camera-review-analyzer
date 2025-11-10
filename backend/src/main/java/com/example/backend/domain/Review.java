@@ -24,8 +24,21 @@ public class Review {
     @Column(name = "sentiment_label")
     private String sentimentLabel;
 
+    @Column(name = "sentiment_score")
+    private Double sentimentScore;
+
+    @Column(name = "sentiment_model")
+    private String sentimentModel;
+
+
     public String getSentimentLabel() { return sentimentLabel; }
     public void setSentimentLabel(String s) { this.sentimentLabel = s; }
+
+    public Double getSentimentScore() { return sentimentScore; }
+    public void setSentimentScore(Double s) { this.sentimentScore = s; }
+
+    public String getSentimentModel() { return sentimentModel; }
+    public void setSentimentModel(String s) { this.sentimentModel = s; }
     
     // --- getters / setters (롬복 안 쓰는 버전) ---
     public Long getId() { return id; }

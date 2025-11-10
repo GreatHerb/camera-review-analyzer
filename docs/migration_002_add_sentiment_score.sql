@@ -1,0 +1,3 @@
+ALTER TABLE review
+  ADD COLUMN IF NOT EXISTS sentiment_score NUMERIC(4,3),
+  ADD COLUMN IF NOT EXISTS sentiment_model TEXT;
