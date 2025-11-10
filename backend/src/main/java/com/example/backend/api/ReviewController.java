@@ -16,17 +16,20 @@ public class ReviewController {
         this.reviewRepo = reviewRepo;
     }
 
-    // 헬스체크
     @GetMapping("/health")
-    public String health() { return "OK"; }
-
-    // 최근 리뷰 20개
-    @GetMapping("/reviews")
-    public List<Review> reviews() {
-        return reviewRepo.findTop20ByOrderByCreatedAtDesc();
+    public String health() {
+        return "OK";
     }
 
-    // 요약 통계
+    // ✅ 단일 메서드로 통합: sentiment 파라미터는 선택 사항
+    @GetMapping("/reviews")
+    public List<Review> reviews(@RequestParam(name = "sentiment", required = false) String sentiment) {
+        if (sentiment == null || sentiment.isBlank()) {
+            return reviewRepo.findTop20ByOrderByCreatedAtDesc();
+        }
+        return reviewRepo.findTop20BySentimentLabelOrderByCreatedAtDesc(sentiment);
+    }
+
     @GetMapping("/stats/summary")
     public Map<String, Object> summary() {
         var list = reviewRepo.findAll();
@@ -39,5 +42,22 @@ public class ReviewController {
         m.put("count", list.size());
         m.put("avgRating", Math.round(avg * 100.0) / 100.0);
         return m;
+    }
+
+    @GetMapping("/stats/sentiment")
+    public Map<String, Object> sentimentStats() {
+        var rows = reviewRepo.countBySentimentGroup();
+        Map<String, Long> buckets = new HashMap<>();
+        long total = 0L;
+        for (Object[] row : rows) {
+            String label = (String) row[0];
+            Long cnt = ((Number) row[1]).longValue();
+            buckets.put(label == null ? "unknown" : label, cnt);
+            total += cnt;
+        }
+        Map<String, Object> out = new HashMap<>();
+        out.put("total", total);
+        out.put("buckets", buckets);
+        return out;
     }
 }

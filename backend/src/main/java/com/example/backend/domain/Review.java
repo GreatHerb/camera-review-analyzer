@@ -21,6 +21,12 @@ public class Review {
     @Column(name = "created_at")
     private LocalDateTime createdAt;
 
+    @Column(name = "sentiment_label")
+    private String sentimentLabel;
+
+    public String getSentimentLabel() { return sentimentLabel; }
+    public void setSentimentLabel(String s) { this.sentimentLabel = s; }
+    
     // --- getters / setters (롬복 안 쓰는 버전) ---
     public Long getId() { return id; }
     public String getSource() { return source; }
