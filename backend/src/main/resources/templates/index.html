@@ -20,7 +20,7 @@
     .btn { background:#1f2937; border:1px solid #334155; color:#cbd5e1; padding:8px 12px; border-radius:10px; cursor:pointer; font-size:13px; }
     .btn.active { border-color:#60a5fa; color:#e2e8f0; box-shadow: 0 0 0 3px rgba(96,165,250,.15) inset; }
     table { width:100%; border-collapse: collapse; font-size:14px; }
-    th, td { padding: 10px 12px; border-bottom: 1px solid #1f2937; }
+    th, td { padding: 10px 12px; border-bottom: 1px solid #1f2937; vertical-align: top; }
     th { text-align:left; color:#93c5fd; font-weight:700; }
     .badge { display:inline-block; padding:4px 8px; border-radius:999px; font-size:12px; border:1px solid #1f2937; }
     .pos { color:#22c55e; border-color:#14532d; background:#052e16; }
@@ -28,6 +28,15 @@
     .neg { color:#f43f5e; border-color:#7f1d1d; background:#450a0a; }
     a.link { color:#93c5fd; text-decoration:none; }
     .kicker { color:#94a3b8; font-size:12px; margin-top:6px; }
+
+    .searchbar { display:flex; gap:8px; flex-wrap:wrap; }
+    .input, .select { background:#0b1220; color:#e2e8f0; border:1px solid #334155; border-radius:10px; padding:8px 12px; font-size:14px; }
+    .input { flex:1 1 280px; }
+    .select { min-width:140px; }
+    .action { background:#1f2937; border:1px solid #334155; color:#cbd5e1; padding:8px 14px; border-radius:10px; cursor:pointer; }
+    .pager { display:flex; align-items:center; gap:10px; margin-top:12px; }
+    .pager .action[disabled] { opacity:.5; cursor:not-allowed; }
+    .small { font-size:12px; color:#94a3b8; }
   </style>
 </head>
 <body>
@@ -52,107 +61,181 @@
       </div>
     </div>
 
-    <!-- 필터 버튼 -->
+    <!-- 검색/필터 바 -->
     <div class="card" style="margin-bottom:16px;">
-      <div class="btns">
-        <button class="btn active" data-filter="">전체</button>
-        <button class="btn" data-filter="positive">positive</button>
-        <button class="btn" data-filter="neutral">neutral</button>
-        <button class="btn" data-filter="negative">negative</button>
+      <div class="searchbar">
+        <input id="q" class="input" type="search" placeholder="키워드 검색 (예: 노이즈, 색감, AF, 배터리)">
+        <select id="sent" class="select">
+          <option value="">감성: 전체</option>
+          <option value="positive">positive</option>
+          <option value="neutral">neutral</option>
+          <option value="negative">negative</option>
+        </select>
+        <select id="size" class="select">
+          <option value="10">10개</option>
+          <option value="20" selected>20개</option>
+          <option value="50">50개</option>
+        </select>
+        <button id="searchBtn" class="action">검색</button>
         <a class="link" href="/swagger-ui.html" style="margin-left:auto;">Swagger UI ↗</a>
       </div>
     </div>
 
     <!-- 리뷰 테이블 -->
     <div class="card">
-      <h2>최신 리뷰 20개</h2>
+      <h2>리뷰 목록</h2>
       <table id="tbl">
         <thead>
           <tr><th>ID</th><th>평점</th><th>감성</th><th>내용</th><th>등록일</th></tr>
         </thead>
         <tbody></tbody>
       </table>
-      <div class="muted" style="margin-top:8px;">* sentiment_label은 Python 라벨러에서 계산됩니다.</div>
+      <div class="pager">
+        <button id="prev" class="action">이전</button>
+        <button id="next" class="action">다음</button>
+        <span id="pageInfo" class="small">0 / 0</span>
+      </div>
+      <div class="muted" style="margin-top:8px;">* sentiment_label은 Python 라벨러 또는 모델에서 계산됩니다.</div>
     </div>
   </div>
 
   <script>
-    // API 베이스 (동일 서버이므로 상대경로)
-    const API = '';
+    // 같은 서버에서 서빙되므로 origin을 명시해서 포트 혼선을 방지
+    const API = window.location.origin;
 
     let chart;
-    async function fetchJSON(path) {
-      const r = await fetch(path);
-      if (!r.ok) throw new Error('HTTP ' + r.status);
-      return await r.json();
-    }
+    const j = async (path) => {
+        const url = path.startsWith('http') ? path : `${API}${path}`;
+        const r = await fetch(url, { headers: { 'Accept': 'application/json' } });
+        const body = await r.text();
+        if (!r.ok) {
+        console.error(`[HTTP ${r.status}] ${url}\n${body}`);
+        throw new Error(`HTTP ${r.status} ${url}`);
+        }
+        try { return JSON.parse(body); }
+        catch (e) { console.error(`JSON parse error on ${url}`, e, '\nRaw:', body); throw e; }
+    };
 
-    function badge(label) {
-      if (!label) return '';
-      const cls = label === 'positive' ? 'pos' : label === 'negative' ? 'neg' : 'neu';
-      return `<span class="badge ${cls}">${label}</span>`;
-    }
+    const badge = (label) => {
+        if (!label) return '';
+        const cls = label === 'positive' ? 'pos' : label === 'negative' ? 'neg' : 'neu';
+        return `<span class="badge ${cls}">${label}</span>`;
+    };
 
     async function loadSummary() {
-      const data = await fetchJSON(`${API}/api/stats/summary`);
-      document.getElementById('stat-count').textContent = data.count ?? '0';
-      document.getElementById('stat-avg').textContent = (data.avgRating ?? 0).toFixed(2);
+        const data = await j('/api/stats/summary');
+        const count = Number(data.count ?? 0);
+        const avg   = Number(data.avgRating ?? 0);
+        document.getElementById('stat-count').textContent = String(count);
+        document.getElementById('stat-avg').textContent   = avg.toFixed(2);
     }
 
     async function loadSentimentChart() {
-      const { total, buckets } = await fetchJSON(`${API}/api/stats/sentiment`);
-      const pos = buckets?.positive || 0;
-      const neu = buckets?.neutral || 0;
-      const neg = buckets?.negative || 0;
-
-      const ctx = document.getElementById('pie');
-      if (chart) chart.destroy();
-      chart = new Chart(ctx, {
+        const d = await j('/api/stats/sentiment');
+        const b = d.buckets || {};
+        const pos = Number(b.positive || 0), neu = Number(b.neutral || 0), neg = Number(b.negative || 0);
+        const ctx = document.getElementById('pie');
+        if (chart) chart.destroy();
+        chart = new Chart(ctx, {
         type: 'doughnut',
-        data: {
-          labels: ['positive', 'neutral', 'negative'],
-          datasets: [{ data: [pos, neu, neg] }]
-        },
-        options: {
-          plugins: { legend: { labels: { color: '#e2e8f0' } } }
-        }
-      });
-    }
-
-    async function loadReviews(sentiment = '') {
-      const url = sentiment ? `${API}/api/reviews?sentiment=${encodeURIComponent(sentiment)}` : `${API}/api/reviews`;
-      const rows = await fetchJSON(url);
-      const tb = document.querySelector('#tbl tbody');
-      tb.innerHTML = rows.map(r => `
-        <tr>
-          <td>${r.id ?? ''}</td>
-          <td>${r.rating ?? ''}</td>
-          <td>${badge(r.sentimentLabel)}</td>
-          <td>${(r.content || '').replace(/</g,'&lt;')}</td>
-          <td>${r.createdAt ?? ''}</td>
-        </tr>
-      `).join('');
-    }
-
-    function setupFilters() {
-      document.querySelectorAll('.btn[data-filter]').forEach(btn => {
-        btn.addEventListener('click', async () => {
-          document.querySelectorAll('.btn[data-filter]').forEach(b => b.classList.remove('active'));
-          btn.classList.add('active');
-          await loadReviews(btn.dataset.filter || '');
+        data: { labels: ['positive', 'neutral', 'negative'], datasets: [{ data: [pos, neu, neg] }] },
+        options: { plugins: { legend: { labels: { color: '#e2e8f0' } } } }
         });
-      });
+    }
+
+    // 검색 상태
+    let S = { page: 0, size: 20, sentiment: '', query: '' };
+
+    // 우선 /search 호출 → 실패하면 /reviews로 폴백
+    async function loadReviews() {
+        const params = new URLSearchParams();
+        if (S.sentiment) params.set('sentiment', S.sentiment);
+        if (S.query)     params.set('query', S.query);
+        params.set('page', S.page);
+        params.set('size', S.size);
+
+        let rows = [];
+        try {
+        const resp = await j(`/api/reviews/search?${params.toString()}`);
+        rows = Array.isArray(resp) ? resp : (resp.content || []);
+        updateTable(rows);
+        updatePager(resp.page ?? 0, resp.totalPages ?? 1);
+        return; // 성공이면 여기서 끝
+        } catch (e) {
+        console.warn('search API failed, fallback to /api/reviews', e);
+        }
+
+        // 폴백: 대시보드용 단순 배열 엔드포인트
+        try {
+        const fallbackParams = new URLSearchParams();
+        if (S.sentiment) fallbackParams.set('sentiment', S.sentiment);
+        const arr = await j(`/api/reviews?${fallbackParams.toString()}`);
+        rows = Array.isArray(arr) ? arr : (arr.content || []);
+        updateTable(rows);
+        // 폴백은 페이지 정보 없음
+        updatePager(0, 1);
+        } catch (e) {
+        console.error('fallback /api/reviews also failed', e);
+        alert('리뷰 로딩 실패 (자세한 오류는 콘솔 확인)');
+        }
+    }
+
+    function updateTable(rows) {
+        const tb = document.querySelector('#tbl tbody');
+        tb.innerHTML = rows.map(r => `
+        <tr>
+            <td>${r.id ?? ''}</td>
+            <td>${r.rating ?? ''}</td>
+            <td>${badge(r.sentimentLabel)}</td>
+            <td>${(r.content || '').replace(/</g,'&lt;')}</td>
+            <td>${r.createdAt ?? ''}</td>
+        </tr>
+        `).join('');
+    }
+
+    function updatePager(page, totalPages) {
+        const prevBtn = document.getElementById('prev');
+        const nextBtn = document.getElementById('next');
+        const info    = document.getElementById('pageInfo');
+        prevBtn.disabled = (page <= 0);
+        nextBtn.disabled = (page >= totalPages - 1);
+        info.textContent = `${(page||0) + 1} / ${totalPages || 1}`;
+    }
+
+    function setupUI() {
+        document.getElementById('searchBtn')?.addEventListener('click', async () => {
+        S.query = document.getElementById('q').value.trim();
+        S.sentiment = document.getElementById('sent').value;
+        S.size = Number(document.getElementById('size').value || 20);
+        S.page = 0;
+        await loadReviews();
+        });
+
+        document.querySelectorAll('.btn[data-filter]')?.forEach(btn => {
+        btn.addEventListener('click', async () => {
+            document.querySelectorAll('.btn[data-filter]').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            S.sentiment = btn.dataset.filter || '';
+            S.page = 0;
+            await loadReviews();
+        });
+        });
+
+        document.getElementById('prev')?.addEventListener('click', async () => {
+        if (S.page > 0) { S.page -= 1; await loadReviews(); }
+        });
+        document.getElementById('next')?.addEventListener('click', async () => {
+        S.page += 1; await loadReviews();
+        });
     }
 
     (async function init() {
-      setupFilters();
-      await loadSummary();
-      await loadSentimentChart();
-      await loadReviews('');
-    })().catch(err => {
-      console.error(err);
-      alert('데이터 로딩 중 오류가 발생했습니다. 콘솔을 확인하세요.');
-    });
-  </script>
+        setupUI();
+        // 개별 try로 어느 호출이 실패했는지 식별
+        try { await loadSummary(); }        catch(e){ console.error(e); alert('요약 통계 로딩 실패'); return; }
+        try { await loadSentimentChart(); } catch(e){ console.error(e); alert('감성 분포 로딩 실패'); return; }
+        try { await loadReviews(); }        catch(e){ console.error(e); alert('리뷰 로딩 실패'); return; }
+    })();
+    </script>
 </body>
 </html>
