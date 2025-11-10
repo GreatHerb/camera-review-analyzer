@@ -1,0 +1,28 @@
+# macOS
+.DS_Store
+
+# Java / Spring Boot
+/target/
+*.class
+*.jar
+*.war
+*.iml
+.idea/
+.vscode/
+.mvn/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.env
+.venv/
+
+# Logs
+*.log
+logs/
+*.out
+
+# System
+Thumbs.db
