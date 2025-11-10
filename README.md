@@ -1,5 +1,5 @@
 # 📸 Camera Review Analyzer
-카메라 리뷰 감성 분석 웹 서비스  
+카메라 리뷰 분석 웹 서비스  
 | 구분 | 기술 |
 |------|------|
 | **Language** | Java (Spring Boot), Python |
