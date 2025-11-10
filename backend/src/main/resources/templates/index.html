@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Camera Review Analyzer</title>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://cdn.jsdelivr.net/npm/modern-css-reset@1.4.0/dist/reset.min.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Apple SD Gothic Neo, "Noto Sans KR", Arial, sans-serif; background:#0f172a; color:#e2e8f0; }
+    .wrap { max-width: 1100px; margin: 40px auto; padding: 0 16px; }
+    h1 { font-size: 26px; font-weight: 700; margin-bottom: 18px; }
+    .grid { display: grid; gap: 16px; grid-template-columns: repeat(12, 1fr); }
+    .card { background:#111827; border:1px solid #1f2937; border-radius: 16px; padding: 18px; box-shadow: 0 8px 24px rgba(0,0,0,.25); }
+    .card h2 { font-size:14px; color:#94a3b8; margin-bottom:8px; font-weight:600; }
+    .stat { font-size: 28px; font-weight:800; color:#f1f5f9; }
+    .muted { color:#94a3b8; font-size:12px; }
+    .btns { display:flex; gap:8px; flex-wrap:wrap; }
+    .btn { background:#1f2937; border:1px solid #334155; color:#cbd5e1; padding:8px 12px; border-radius:10px; cursor:pointer; font-size:13px; }
+    .btn.active { border-color:#60a5fa; color:#e2e8f0; box-shadow: 0 0 0 3px rgba(96,165,250,.15) inset; }
+    table { width:100%; border-collapse: collapse; font-size:14px; }
+    th, td { padding: 10px 12px; border-bottom: 1px solid #1f2937; }
+    th { text-align:left; color:#93c5fd; font-weight:700; }
+    .badge { display:inline-block; padding:4px 8px; border-radius:999px; font-size:12px; border:1px solid #1f2937; }
+    .pos { color:#22c55e; border-color:#14532d; background:#052e16; }
+    .neu { color:#eab308; border-color:#713f12; background:#422006; }
+    .neg { color:#f43f5e; border-color:#7f1d1d; background:#450a0a; }
+    a.link { color:#93c5fd; text-decoration:none; }
+    .kicker { color:#94a3b8; font-size:12px; margin-top:6px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Camera Review Analyzer</h1>
+
+    <!-- 상단 카드: 통계 -->
+    <div class="grid" style="margin-bottom:16px;">
+      <div class="card" style="grid-column: span 4;">
+        <h2>총 리뷰 수</h2>
+        <div class="stat" id="stat-count">—</div>
+        <div class="kicker">DB에 적재된 전체 리뷰 개수</div>
+      </div>
+      <div class="card" style="grid-column: span 4;">
+        <h2>평균 평점</h2>
+        <div class="stat" id="stat-avg">—</div>
+        <div class="kicker">소수점 2자리 반올림</div>
+      </div>
+      <div class="card" style="grid-column: span 4;">
+        <h2>감성 분포</h2>
+        <canvas id="pie" height="120"></canvas>
+      </div>
+    </div>
+
+    <!-- 필터 버튼 -->
+    <div class="card" style="margin-bottom:16px;">
+      <div class="btns">
+        <button class="btn active" data-filter="">전체</button>
+        <button class="btn" data-filter="positive">positive</button>
+        <button class="btn" data-filter="neutral">neutral</button>
+        <button class="btn" data-filter="negative">negative</button>
+        <a class="link" href="/swagger-ui.html" style="margin-left:auto;">Swagger UI ↗</a>
+      </div>
+    </div>
+
+    <!-- 리뷰 테이블 -->
+    <div class="card">
+      <h2>최신 리뷰 20개</h2>
+      <table id="tbl">
+        <thead>
+          <tr><th>ID</th><th>평점</th><th>감성</th><th>내용</th><th>등록일</th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+      <div class="muted" style="margin-top:8px;">* sentiment_label은 Python 라벨러에서 계산됩니다.</div>
+    </div>
+  </div>
+
+  <script>
+    // API 베이스 (동일 서버이므로 상대경로)
+    const API = '';
+
+    let chart;
+    async function fetchJSON(path) {
+      const r = await fetch(path);
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return await r.json();
+    }
+
+    function badge(label) {
+      if (!label) return '';
+      const cls = label === 'positive' ? 'pos' : label === 'negative' ? 'neg' : 'neu';
+      return `<span class="badge ${cls}">${label}</span>`;
+    }
+
+    async function loadSummary() {
+      const data = await fetchJSON(`${API}/api/stats/summary`);
+      document.getElementById('stat-count').textContent = data.count ?? '0';
+      document.getElementById('stat-avg').textContent = (data.avgRating ?? 0).toFixed(2);
+    }
+
+    async function loadSentimentChart() {
+      const { total, buckets } = await fetchJSON(`${API}/api/stats/sentiment`);
+      const pos = buckets?.positive || 0;
+      const neu = buckets?.neutral || 0;
+      const neg = buckets?.negative || 0;
+
+      const ctx = document.getElementById('pie');
+      if (chart) chart.destroy();
+      chart = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+          labels: ['positive', 'neutral', 'negative'],
+          datasets: [{ data: [pos, neu, neg] }]
+        },
+        options: {
+          plugins: { legend: { labels: { color: '#e2e8f0' } } }
+        }
+      });
+    }
+
+    async function loadReviews(sentiment = '') {
+      const url = sentiment ? `${API}/api/reviews?sentiment=${encodeURIComponent(sentiment)}` : `${API}/api/reviews`;
+      const rows = await fetchJSON(url);
+      const tb = document.querySelector('#tbl tbody');
+      tb.innerHTML = rows.map(r => `
+        <tr>
+          <td>${r.id ?? ''}</td>
+          <td>${r.rating ?? ''}</td>
+          <td>${badge(r.sentimentLabel)}</td>
+          <td>${(r.content || '').replace(/</g,'&lt;')}</td>
+          <td>${r.createdAt ?? ''}</td>
+        </tr>
+      `).join('');
+    }
+
+    function setupFilters() {
+      document.querySelectorAll('.btn[data-filter]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          document.querySelectorAll('.btn[data-filter]').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          await loadReviews(btn.dataset.filter || '');
+        });
+      });
+    }
+
+    (async function init() {
+      setupFilters();
+      await loadSummary();
+      await loadSentimentChart();
+      await loadReviews('');
+    })().catch(err => {
+      console.error(err);
+      alert('데이터 로딩 중 오류가 발생했습니다. 콘솔을 확인하세요.');
+    });
+  </script>
+</body>
+</html>
