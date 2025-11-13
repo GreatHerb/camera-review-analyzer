@@ -26,9 +26,9 @@
     a.link { color:#93c5fd; text-decoration:none; }
     .kicker { color:#94a3b8; font-size:12px; margin-top:6px; }
 
-    .searchbar { display:flex; gap:8px; flex-wrap:wrap; }
+    .searchbar { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:4px; }
     .input, .select { background:#0b1220; color:#e2e8f0; border:1px solid #334155; border-radius:10px; padding:8px 12px; font-size:14px; }
-    .input { flex:1 1 280px; }
+    .input { flex:1 1 260px; }
     .select { min-width:140px; }
     .action { background:#1f2937; border:1px solid #334155; color:#cbd5e1; padding:8px 14px; border-radius:10px; cursor:pointer; }
     .pager { display:flex; align-items:center; gap:10px; margin-top:12px; }
@@ -40,12 +40,12 @@
   <div class="wrap">
     <h1>Camera Review Analyzer</h1>
 
-    <!-- 상단 카드: 통계 -->
+    <!-- 상단 카드: 통계 (선택된 카메라 기준) -->
     <div class="grid" style="margin-bottom:16px;">
       <div class="card" style="grid-column: span 4;">
         <h2>총 리뷰 수</h2>
         <div class="stat" id="stat-count">—</div>
-        <div class="kicker">DB에 적재된 전체 리뷰 개수</div>
+        <div class="kicker" id="stat-count-desc">DB에 적재된 전체 리뷰 개수</div>
       </div>
       <div class="card" style="grid-column: span 4;">
         <h2>평균 감성 점수</h2>
@@ -70,10 +70,10 @@
           <option value="negative">negative</option>
         </select>
 
-        <!-- ✅ 새로 추가: 카메라 기종 필터 -->
+        <!-- 카메라 기종 필터 -->
         <select id="camera" class="select">
           <option value="">카메라: 전체</option>
-          <!-- 옵션들은 JS에서 동적으로 채움 -->
+          <!-- 옵션은 JS에서 /api/cameras 응답으로 채움 -->
         </select>
 
         <select id="size" class="select">
@@ -85,33 +85,47 @@
         <button id="searchBtn" class="action">검색</button>
         <a class="link" href="/swagger-ui.html" style="margin-left:auto;">Swagger UI ↗</a>
       </div>
+    </div>
 
     <!-- 리뷰 테이블 -->
     <div class="card">
       <h2>리뷰 목록</h2>
       <table id="tbl">
         <thead>
-          <!-- ID 제거, 평점 → 감성 점수 -->
-          <tr><th>감성 점수</th><th>감성</th><th>내용</th><th>등록일</th></tr>
+          <tr>
+            <th>감성 점수</th>
+            <th>감성</th>
+            <th>내용</th>
+            <th>등록일</th>
+          </tr>
         </thead>
         <tbody></tbody>
       </table>
       <div class="pager">
         <button id="prev" class="action">이전</button>
         <button id="next" class="action">다음</button>
-        <span id="pageInfo" class="small">0 / 0</span>
+        <span id="pageInfo" class="small">0 / 0 · 총 0개</span>
       </div>
-      <div class="muted" style="margin-top:8px;">* sentiment_label은 Python 라벨러 또는 모델에서 계산됩니다.</div>
+      <div class="muted" style="margin-top:8px;">
+        * sentiment_label/score는 Python 라벨러(모델)에서 계산됩니다.
+      </div>
     </div>
   </div>
 
   <script>
     const API = window.location.origin;
-
     let chart;
-    let ALL_ROWS = [];      // DB에서 온 전체 리뷰
-    let FILTERED_ROWS = []; // 필터/검색 적용된 결과
 
+    // 검색 상태
+    let S = {
+      page: 0,
+      size: 20,
+      sentiment: '',
+      camera: '',
+      query: ''
+    };
+
+    // 공통 fetch + JSON
     const j = async (path) => {
       const url = path.startsWith('http') ? path : `${API}${path}`;
       const r = await fetch(url, { headers: { 'Accept': 'application/json' } });
@@ -121,7 +135,10 @@
         throw new Error(`HTTP ${r.status} ${url}`);
       }
       try { return JSON.parse(body); }
-      catch (e) { console.error(`JSON parse error on ${url}`, e, '\nRaw:', body); throw e; }
+      catch(e) {
+        console.error(`JSON parse error on ${url}`, e, '\nRaw:', body);
+        throw e;
+      }
     };
 
     const badge = (label) => {
@@ -130,105 +147,100 @@
       return `<span class="badge ${cls}">${label}</span>`;
     };
 
-    async function loadSummary() {
-      const data = await j('/api/stats/summary');
-      const count = Number(data.count ?? 0);
-      const avg   = Number(data.avgSentiment ?? 0);  // ← 여기만 변경
-
-      document.getElementById('stat-count').textContent = String(count);
-      document.getElementById('stat-avg').textContent   = avg.toFixed(2);
+    // 카메라 목록 불러오기 (/api/cameras → <select id="camera"> 옵션 생성)
+    async function loadCameras() {
+      const select = document.getElementById('camera');
+      if (!select) return;
+      try {
+        const arr = await j('/api/cameras'); // ["Canon EOS R8", "Canon EOS R6", "Unknown", ...]
+        select.innerHTML = '<option value="">카메라: 전체</option>';
+        arr.forEach(m => {
+          const opt = document.createElement('option');
+          opt.value = m;
+          opt.textContent = m;
+          select.appendChild(opt);
+        });
+      } catch (e) {
+        console.error('카메라 목록 로딩 실패', e);
+      }
     }
 
+    // 요약 통계 로딩 (선택된 카메라 기준)
+    async function loadSummary() {
+      const params = new URLSearchParams();
+      if (S.camera) params.set('camera', S.camera);
+      const qs = params.toString() ? `?${params.toString()}` : '';
+      const data = await j(`/api/stats/summary${qs}`);
+
+      const count = Number(data.count ?? 0);
+      const avg   = Number(data.avgSentiment ?? 0);
+
+      const $count = document.getElementById('stat-count');
+      const $avg   = document.getElementById('stat-avg');
+      const $desc  = document.getElementById('stat-count-desc');
+
+      $count.textContent = String(count);
+      $avg.textContent   = avg.toFixed(2);
+
+      if (S.camera) {
+        $desc.textContent = `선택된 카메라(${S.camera})에 대한 리뷰 개수`;
+      } else {
+        $desc.textContent = 'DB에 적재된 전체 리뷰 개수';
+      }
+    }
+
+    // 감성 분포 도넛 차트 (선택된 카메라 기준)
     async function loadSentimentChart() {
-      const d = await j('/api/stats/sentiment');
+      const params = new URLSearchParams();
+      if (S.camera) params.set('camera', S.camera);
+      const qs = params.toString() ? `?${params.toString()}` : '';
+      const d = await j(`/api/stats/sentiment${qs}`);
+
       const b = d.buckets || {};
-      const pos = Number(b.positive || 0), neu = Number(b.neutral || 0), neg = Number(b.negative || 0);
+      const pos = Number(b.positive || 0);
+      const neu = Number(b.neutral || 0);
+      const neg = Number(b.negative || 0);
+
       const ctx = document.getElementById('pie');
       if (chart) chart.destroy();
       chart = new Chart(ctx, {
         type: 'doughnut',
-        data: { labels: ['positive', 'neutral', 'negative'], datasets: [{ data: [pos, neu, neg] }] },
-        options: { plugins: { legend: { labels: { color: '#e2e8f0' } } } }
+        data: {
+          labels: ['positive', 'neutral', 'negative'],
+          datasets: [{ data: [pos, neu, neg] }]
+        },
+        options: {
+          plugins: {
+            legend: { labels: { color: '#e2e8f0' } }
+          }
+        }
       });
     }
 
-    // 검색 상태
-    let S = {
-      page: 0,
-      size: 20,
-      sentiment: '',
-      camera: '',  
-      query: ''
-    };
+    // 리뷰 조회 (검색 + 페이지네이션 + 감성/카메라/키워드 필터)
+    async function loadReviews() {
+      const params = new URLSearchParams();
+      if (S.sentiment) params.set('sentiment', S.sentiment);
+      if (S.camera)    params.set('camera', S.camera);
+      if (S.query)     params.set('query', S.query);
+      params.set('page', S.page);
+      params.set('size', S.size);
 
-    // 전체 리뷰를 서버에서 가져옴
-    async function loadAllReviews() {
-      const arr = await j('/api/reviews/all');
-      ALL_ROWS = Array.isArray(arr) ? arr : [];
+      const resp = await j(`/api/reviews/search?${params.toString()}`);
+      const rows = Array.isArray(resp) ? resp : (resp.content || []);
+      const page        = resp.number ?? 0;
+      const totalPages  = resp.totalPages ?? 1;
+      const totalElems  = resp.totalElements ?? rows.length;
 
-      buildCameraOptions();
-      applyFilterAndPagination();
-    }
-    function buildCameraOptions() {
-      const select = document.getElementById('camera');
-      if (!select) return;
-
-      // cameraModel 값들만 모아서 정렬 + 중복 제거
-      const set = new Set();
-      ALL_ROWS.forEach(r => {
-        const m = (r.cameraModel || r.camera_model || '').trim();
-        if (m) set.add(m);
-      });
-
-      // 기존 옵션(전체)만 남기고 나머지 제거
-      select.innerHTML = '<option value="">카메라: 전체</option>';
-
-      Array.from(set).sort().forEach(m => {
-        const opt = document.createElement('option');
-        opt.value = m;
-        opt.textContent = m;
-        select.appendChild(opt);
-      });
-    }
-
-    function applyFilterAndPagination() {
-      const q = (S.query || '').toLowerCase();
-
-      FILTERED_ROWS = ALL_ROWS.filter(r => {
-        const matchSent =
-          !S.sentiment ||
-          (r.sentimentLabel && r.sentimentLabel.toLowerCase() === S.sentiment.toLowerCase());
-
-        const text = (r.content || '').toLowerCase();
-        const matchQuery = !q || text.includes(q);
-
-        // 카메라 매칭 (없으면 전체)
-        const cam = (S.camera || '').toLowerCase();
-        const model = (r.cameraModel || r.camera_model || '').toLowerCase();
-        const matchCamera = !cam || model === cam;
-
-        return matchSent && matchQuery && matchCamera;
-      });
-
-      const total = FILTERED_ROWS.length;
-      const size  = S.size;
-      const totalPages = Math.max(1, Math.ceil(total / size));
-
-      if (S.page >= totalPages) S.page = totalPages - 1;
-      if (S.page < 0) S.page = 0;
-
-      const start = S.page * size;
-      const pageRows = FILTERED_ROWS.slice(start, start + size);
-
-      updateTable(pageRows);
-      updatePager(S.page, totalPages, total);
+      updateTable(rows);
+      updatePager(page, totalPages, totalElems);
     }
 
     function updateTable(rows) {
       const tb = document.querySelector('#tbl tbody');
       tb.innerHTML = rows.map(r => `
         <tr>
-          <td>${r.sentimentScore != null ? Number(r.sentimentScore).toFixed(3) : ''}</td>
+          <td>${(r.sentimentScore ?? '').toString()}</td>
           <td>${badge(r.sentimentLabel)}</td>
           <td>${(r.content || '').replace(/</g,'&lt;')}</td>
           <td>${r.createdAt ?? ''}</td>
@@ -240,45 +252,63 @@
       const prevBtn = document.getElementById('prev');
       const nextBtn = document.getElementById('next');
       const info    = document.getElementById('pageInfo');
+
       prevBtn.disabled = (page <= 0);
       nextBtn.disabled = (page >= totalPages - 1);
-      info.textContent = `${page + 1} / ${totalPages} · 총 ${totalElements || 0}개`;
+
+      info.textContent = `${(page || 0) + 1} / ${totalPages || 1} · 총 ${totalElements || 0}개`;
+    }
+
+    // 🔁 공통: 현재 UI 상태 읽어서 S에 반영 후 전체 새로고침
+    async function applyFiltersAndRefresh() {
+      S.query     = document.getElementById('q').value.trim();
+      S.sentiment = document.getElementById('sent').value;
+      S.camera    = document.getElementById('camera').value;
+      S.size      = Number(document.getElementById('size').value || 20);
+      S.page      = 0;
+
+      await loadSummary();
+      await loadSentimentChart();
+      await loadReviews();
     }
 
     function setupUI() {
-      document.getElementById('searchBtn')?.addEventListener('click', async () => {
-        S.query = document.getElementById('q').value.trim();
-        S.sentiment = document.getElementById('sent').value;
-        S.camera    = document.getElementById('camera').value;
-        S.size = Number(document.getElementById('size').value || 20);
-        S.page = 0;
-        applyFilterAndPagination(); // ALL_ROWS는 그대로 두고 필터/페이지 재계산
+      // 🔍 검색 버튼 클릭 시 전체 새로고침
+      document.getElementById('searchBtn')?.addEventListener('click', () => {
+        applyFiltersAndRefresh().catch(err => {
+          console.error('검색 중 오류', err);
+          alert('검색 중 오류가 발생했습니다. (자세한 내용은 콘솔 참고)');
+        });
       });
 
-      document.getElementById('prev')?.addEventListener('click', () => {
+      // 📷 카메라 셀렉트 변경 시 → 검색 버튼 눌렀을 때와 동일한 동작
+      document.getElementById('camera')?.addEventListener('change', () => {
+        applyFiltersAndRefresh().catch(err => {
+          console.error('카메라 변경 중 오류', err);
+          // 카메라 변경은 굳이 alert 안 띄우고 조용히 콘솔에만 에러 남김
+        });
+      });
+
+      // 페이지네이션
+      document.getElementById('prev')?.addEventListener('click', async () => {
         if (S.page > 0) {
           S.page -= 1;
-          applyFilterAndPagination();
+          await loadReviews();
         }
       });
 
-      document.getElementById('next')?.addEventListener('click', () => {
+      document.getElementById('next')?.addEventListener('click', async () => {
         S.page += 1;
-        applyFilterAndPagination();
-      });
-
-      document.getElementById('size')?.addEventListener('change', () => {
-        S.size = Number(document.getElementById('size').value || 20);
-        S.page = 0;
-        applyFilterAndPagination();
+        await loadReviews();
       });
     }
 
     (async function init() {
+      await loadCameras();   // 카메라 목록 먼저
       setupUI();
-      try { await loadSummary(); }        catch(e){ console.error(e); alert('요약 통계 로딩 실패'); return; }
-      try { await loadSentimentChart(); } catch(e){ console.error(e); alert('감성 분포 로딩 실패'); return; }
-      try { await loadAllReviews(); }     catch(e){ console.error(e); alert('리뷰 로딩 실패'); return; }
+      await loadSummary();   // 초기: 전체 기준
+      await loadSentimentChart();
+      await loadReviews();
     })();
   </script>
 </body>
