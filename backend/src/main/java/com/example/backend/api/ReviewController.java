@@ -3,6 +3,7 @@ package com.example.backend.api;
 import com.example.backend.domain.Review;
 import com.example.backend.repo.ReviewRepo;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.data.domain.Sort;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -81,18 +82,23 @@ public class ReviewController {
     // 요약 통계 (개수/평균 평점)
     @GetMapping("/stats/summary")
     public Map<String, Object> summary() {
-        List<Review> all = reviewRepo.findAll();
-        int count = all.size();
-        double avg = 0.0;
-        if (count > 0) {
-            avg = all.stream()
-                     .filter(r -> r.getRating() != null)
-                     .collect(Collectors.averagingDouble(r -> r.getRating()))
-                     .doubleValue();
+        long count = reviewRepo.count();
+        Double avgSentiment = reviewRepo.findAvgSentimentScore();
+        if (avgSentiment == null) {
+            avgSentiment = 0.0;
         }
-        Map<String, Object> out = new HashMap<>();
-        out.put("count", count);
-        out.put("avgRating", avg);
-        return out;
+
+        Map<String, Object> resp = new HashMap<>();
+        resp.put("count", count);
+        // 프론트에서 쓰기 쉽게 avgSentiment라는 이름으로 보냄
+        resp.put("avgSentiment", avgSentiment);
+
+        return resp;
+    }
+
+    @GetMapping("/reviews/all")
+    public List<Review> findAll() {
+        // createdAt 내림차순으로 전체 리뷰 반환
+        return reviewRepo.findAll(Sort.by(Sort.Direction.DESC, "createdAt"));
     }
 }

@@ -28,4 +28,8 @@ public interface ReviewRepo extends JpaRepository<Review, Long> {
     // 감성 라벨별 개수 집계
     @Query("SELECT r.sentimentLabel AS label, COUNT(r) AS cnt FROM Review r GROUP BY r.sentimentLabel")
     List<Object[]> countBySentimentGroup();
+
+    // 평균 감성 점수 (sentimentScore 컬럼 평균)
+    @Query("select coalesce(avg(r.sentimentScore), 0) from Review r")
+    Double findAvgSentimentScore();
 }

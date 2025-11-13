@@ -26,3 +26,7 @@ logs/
 
 # System
 Thumbs.db
+# Environment variables
+.env
+*.env
+

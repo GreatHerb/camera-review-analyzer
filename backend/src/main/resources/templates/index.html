@@ -16,9 +16,6 @@
     .card h2 { font-size:14px; color:#94a3b8; margin-bottom:8px; font-weight:600; }
     .stat { font-size: 28px; font-weight:800; color:#f1f5f9; }
     .muted { color:#94a3b8; font-size:12px; }
-    .btns { display:flex; gap:8px; flex-wrap:wrap; }
-    .btn { background:#1f2937; border:1px solid #334155; color:#cbd5e1; padding:8px 12px; border-radius:10px; cursor:pointer; font-size:13px; }
-    .btn.active { border-color:#60a5fa; color:#e2e8f0; box-shadow: 0 0 0 3px rgba(96,165,250,.15) inset; }
     table { width:100%; border-collapse: collapse; font-size:14px; }
     th, td { padding: 10px 12px; border-bottom: 1px solid #1f2937; vertical-align: top; }
     th { text-align:left; color:#93c5fd; font-weight:700; }
@@ -51,9 +48,9 @@
         <div class="kicker">DB에 적재된 전체 리뷰 개수</div>
       </div>
       <div class="card" style="grid-column: span 4;">
-        <h2>평균 평점</h2>
+        <h2>평균 감성 점수</h2>
         <div class="stat" id="stat-avg">—</div>
-        <div class="kicker">소수점 2자리 반올림</div>
+        <div class="kicker">모델 신뢰도(0~1) 평균, 소수점 2자리</div>
       </div>
       <div class="card" style="grid-column: span 4;">
         <h2>감성 분포</h2>
@@ -86,7 +83,8 @@
       <h2>리뷰 목록</h2>
       <table id="tbl">
         <thead>
-          <tr><th>ID</th><th>평점</th><th>감성</th><th>내용</th><th>등록일</th></tr>
+          <!-- ID 제거, 평점 → 감성 점수 -->
+          <tr><th>감성 점수</th><th>감성</th><th>내용</th><th>등록일</th></tr>
         </thead>
         <tbody></tbody>
       </table>
@@ -100,142 +98,143 @@
   </div>
 
   <script>
-    // 같은 서버에서 서빙되므로 origin을 명시해서 포트 혼선을 방지
     const API = window.location.origin;
 
     let chart;
+    let ALL_ROWS = [];      // DB에서 온 전체 리뷰
+    let FILTERED_ROWS = []; // 필터/검색 적용된 결과
+
     const j = async (path) => {
-        const url = path.startsWith('http') ? path : `${API}${path}`;
-        const r = await fetch(url, { headers: { 'Accept': 'application/json' } });
-        const body = await r.text();
-        if (!r.ok) {
+      const url = path.startsWith('http') ? path : `${API}${path}`;
+      const r = await fetch(url, { headers: { 'Accept': 'application/json' } });
+      const body = await r.text();
+      if (!r.ok) {
         console.error(`[HTTP ${r.status}] ${url}\n${body}`);
         throw new Error(`HTTP ${r.status} ${url}`);
-        }
-        try { return JSON.parse(body); }
-        catch (e) { console.error(`JSON parse error on ${url}`, e, '\nRaw:', body); throw e; }
+      }
+      try { return JSON.parse(body); }
+      catch (e) { console.error(`JSON parse error on ${url}`, e, '\nRaw:', body); throw e; }
     };
 
     const badge = (label) => {
-        if (!label) return '';
-        const cls = label === 'positive' ? 'pos' : label === 'negative' ? 'neg' : 'neu';
-        return `<span class="badge ${cls}">${label}</span>`;
+      if (!label) return '';
+      const cls = label === 'positive' ? 'pos' : label === 'negative' ? 'neg' : 'neu';
+      return `<span class="badge ${cls}">${label}</span>`;
     };
 
     async function loadSummary() {
-        const data = await j('/api/stats/summary');
-        const count = Number(data.count ?? 0);
-        const avg   = Number(data.avgRating ?? 0);
-        document.getElementById('stat-count').textContent = String(count);
-        document.getElementById('stat-avg').textContent   = avg.toFixed(2);
+      const data = await j('/api/stats/summary');
+      const count = Number(data.count ?? 0);
+      const avg   = Number(data.avgSentiment ?? 0);  // ← 여기만 변경
+
+      document.getElementById('stat-count').textContent = String(count);
+      document.getElementById('stat-avg').textContent   = avg.toFixed(2);
     }
 
     async function loadSentimentChart() {
-        const d = await j('/api/stats/sentiment');
-        const b = d.buckets || {};
-        const pos = Number(b.positive || 0), neu = Number(b.neutral || 0), neg = Number(b.negative || 0);
-        const ctx = document.getElementById('pie');
-        if (chart) chart.destroy();
-        chart = new Chart(ctx, {
+      const d = await j('/api/stats/sentiment');
+      const b = d.buckets || {};
+      const pos = Number(b.positive || 0), neu = Number(b.neutral || 0), neg = Number(b.negative || 0);
+      const ctx = document.getElementById('pie');
+      if (chart) chart.destroy();
+      chart = new Chart(ctx, {
         type: 'doughnut',
         data: { labels: ['positive', 'neutral', 'negative'], datasets: [{ data: [pos, neu, neg] }] },
         options: { plugins: { legend: { labels: { color: '#e2e8f0' } } } }
-        });
+      });
     }
 
     // 검색 상태
     let S = { page: 0, size: 20, sentiment: '', query: '' };
 
-    // 우선 /search 호출 → 실패하면 /reviews로 폴백
-    async function loadReviews() {
-        const params = new URLSearchParams();
-        if (S.sentiment) params.set('sentiment', S.sentiment);
-        if (S.query)     params.set('query', S.query);
-        params.set('page', S.page);
-        params.set('size', S.size);
+    // 전체 리뷰를 서버에서 가져옴
+    async function loadAllReviews() {
+      const arr = await j('/api/reviews/all');
+      ALL_ROWS = Array.isArray(arr) ? arr : [];
+      applyFilterAndPagination();
+    }
 
-        let rows = [];
-        try {
-        const resp = await j(`/api/reviews/search?${params.toString()}`);
-        rows = Array.isArray(resp) ? resp : (resp.content || []);
-        updateTable(rows);
-        updatePager(resp.page ?? 0, resp.totalPages ?? 1);
-        return; // 성공이면 여기서 끝
-        } catch (e) {
-        console.warn('search API failed, fallback to /api/reviews', e);
-        }
+    function applyFilterAndPagination() {
+      const q = (S.query || '').toLowerCase();
 
-        // 폴백: 대시보드용 단순 배열 엔드포인트
-        try {
-        const fallbackParams = new URLSearchParams();
-        if (S.sentiment) fallbackParams.set('sentiment', S.sentiment);
-        const arr = await j(`/api/reviews?${fallbackParams.toString()}`);
-        rows = Array.isArray(arr) ? arr : (arr.content || []);
-        updateTable(rows);
-        // 폴백은 페이지 정보 없음
-        updatePager(0, 1);
-        } catch (e) {
-        console.error('fallback /api/reviews also failed', e);
-        alert('리뷰 로딩 실패 (자세한 오류는 콘솔 확인)');
-        }
+      FILTERED_ROWS = ALL_ROWS.filter(r => {
+        const matchSent =
+          !S.sentiment ||
+          (r.sentimentLabel && r.sentimentLabel.toLowerCase() === S.sentiment.toLowerCase());
+        const text = (r.content || '').toLowerCase();
+        const matchQuery = !q || text.includes(q);
+        return matchSent && matchQuery;
+      });
+
+      const total = FILTERED_ROWS.length;
+      const size  = S.size;
+      const totalPages = Math.max(1, Math.ceil(total / size));
+
+      if (S.page >= totalPages) S.page = totalPages - 1;
+      if (S.page < 0) S.page = 0;
+
+      const start = S.page * size;
+      const pageRows = FILTERED_ROWS.slice(start, start + size);
+
+      updateTable(pageRows);
+      updatePager(S.page, totalPages, total);
     }
 
     function updateTable(rows) {
-        const tb = document.querySelector('#tbl tbody');
-        tb.innerHTML = rows.map(r => `
+      const tb = document.querySelector('#tbl tbody');
+      tb.innerHTML = rows.map(r => `
         <tr>
-            <td>${r.id ?? ''}</td>
-            <td>${r.rating ?? ''}</td>
-            <td>${badge(r.sentimentLabel)}</td>
-            <td>${(r.content || '').replace(/</g,'&lt;')}</td>
-            <td>${r.createdAt ?? ''}</td>
+          <td>${r.sentimentScore != null ? Number(r.sentimentScore).toFixed(3) : ''}</td>
+          <td>${badge(r.sentimentLabel)}</td>
+          <td>${(r.content || '').replace(/</g,'&lt;')}</td>
+          <td>${r.createdAt ?? ''}</td>
         </tr>
-        `).join('');
+      `).join('');
     }
 
-    function updatePager(page, totalPages) {
-        const prevBtn = document.getElementById('prev');
-        const nextBtn = document.getElementById('next');
-        const info    = document.getElementById('pageInfo');
-        prevBtn.disabled = (page <= 0);
-        nextBtn.disabled = (page >= totalPages - 1);
-        info.textContent = `${(page||0) + 1} / ${totalPages || 1}`;
+    function updatePager(page, totalPages, totalElements) {
+      const prevBtn = document.getElementById('prev');
+      const nextBtn = document.getElementById('next');
+      const info    = document.getElementById('pageInfo');
+      prevBtn.disabled = (page <= 0);
+      nextBtn.disabled = (page >= totalPages - 1);
+      info.textContent = `${page + 1} / ${totalPages} · 총 ${totalElements || 0}개`;
     }
 
     function setupUI() {
-        document.getElementById('searchBtn')?.addEventListener('click', async () => {
+      document.getElementById('searchBtn')?.addEventListener('click', async () => {
         S.query = document.getElementById('q').value.trim();
         S.sentiment = document.getElementById('sent').value;
         S.size = Number(document.getElementById('size').value || 20);
         S.page = 0;
-        await loadReviews();
-        });
+        applyFilterAndPagination(); // ALL_ROWS는 그대로 두고 필터/페이지 재계산
+      });
 
-        document.querySelectorAll('.btn[data-filter]')?.forEach(btn => {
-        btn.addEventListener('click', async () => {
-            document.querySelectorAll('.btn[data-filter]').forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-            S.sentiment = btn.dataset.filter || '';
-            S.page = 0;
-            await loadReviews();
-        });
-        });
+      document.getElementById('prev')?.addEventListener('click', () => {
+        if (S.page > 0) {
+          S.page -= 1;
+          applyFilterAndPagination();
+        }
+      });
 
-        document.getElementById('prev')?.addEventListener('click', async () => {
-        if (S.page > 0) { S.page -= 1; await loadReviews(); }
-        });
-        document.getElementById('next')?.addEventListener('click', async () => {
-        S.page += 1; await loadReviews();
-        });
+      document.getElementById('next')?.addEventListener('click', () => {
+        S.page += 1;
+        applyFilterAndPagination();
+      });
+
+      document.getElementById('size')?.addEventListener('change', () => {
+        S.size = Number(document.getElementById('size').value || 20);
+        S.page = 0;
+        applyFilterAndPagination();
+      });
     }
 
     (async function init() {
-        setupUI();
-        // 개별 try로 어느 호출이 실패했는지 식별
-        try { await loadSummary(); }        catch(e){ console.error(e); alert('요약 통계 로딩 실패'); return; }
-        try { await loadSentimentChart(); } catch(e){ console.error(e); alert('감성 분포 로딩 실패'); return; }
-        try { await loadReviews(); }        catch(e){ console.error(e); alert('리뷰 로딩 실패'); return; }
+      setupUI();
+      try { await loadSummary(); }        catch(e){ console.error(e); alert('요약 통계 로딩 실패'); return; }
+      try { await loadSentimentChart(); } catch(e){ console.error(e); alert('감성 분포 로딩 실패'); return; }
+      try { await loadAllReviews(); }     catch(e){ console.error(e); alert('리뷰 로딩 실패'); return; }
     })();
-    </script>
+  </script>
 </body>
 </html>
