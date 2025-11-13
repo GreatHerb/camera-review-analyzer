@@ -62,21 +62,29 @@
     <div class="card" style="margin-bottom:16px;">
       <div class="searchbar">
         <input id="q" class="input" type="search" placeholder="키워드 검색 (예: 노이즈, 색감, AF, 배터리)">
+
         <select id="sent" class="select">
           <option value="">감성: 전체</option>
           <option value="positive">positive</option>
           <option value="neutral">neutral</option>
           <option value="negative">negative</option>
         </select>
+
+        <!-- ✅ 새로 추가: 카메라 기종 필터 -->
+        <select id="camera" class="select">
+          <option value="">카메라: 전체</option>
+          <!-- 옵션들은 JS에서 동적으로 채움 -->
+        </select>
+
         <select id="size" class="select">
           <option value="10">10개</option>
           <option value="20" selected>20개</option>
           <option value="50">50개</option>
         </select>
+
         <button id="searchBtn" class="action">검색</button>
         <a class="link" href="/swagger-ui.html" style="margin-left:auto;">Swagger UI ↗</a>
       </div>
-    </div>
 
     <!-- 리뷰 테이블 -->
     <div class="card">
@@ -145,13 +153,42 @@
     }
 
     // 검색 상태
-    let S = { page: 0, size: 20, sentiment: '', query: '' };
+    let S = {
+      page: 0,
+      size: 20,
+      sentiment: '',
+      camera: '',  
+      query: ''
+    };
 
     // 전체 리뷰를 서버에서 가져옴
     async function loadAllReviews() {
       const arr = await j('/api/reviews/all');
       ALL_ROWS = Array.isArray(arr) ? arr : [];
+
+      buildCameraOptions();
       applyFilterAndPagination();
+    }
+    function buildCameraOptions() {
+      const select = document.getElementById('camera');
+      if (!select) return;
+
+      // cameraModel 값들만 모아서 정렬 + 중복 제거
+      const set = new Set();
+      ALL_ROWS.forEach(r => {
+        const m = (r.cameraModel || r.camera_model || '').trim();
+        if (m) set.add(m);
+      });
+
+      // 기존 옵션(전체)만 남기고 나머지 제거
+      select.innerHTML = '<option value="">카메라: 전체</option>';
+
+      Array.from(set).sort().forEach(m => {
+        const opt = document.createElement('option');
+        opt.value = m;
+        opt.textContent = m;
+        select.appendChild(opt);
+      });
     }
 
     function applyFilterAndPagination() {
@@ -161,9 +198,16 @@
         const matchSent =
           !S.sentiment ||
           (r.sentimentLabel && r.sentimentLabel.toLowerCase() === S.sentiment.toLowerCase());
+
         const text = (r.content || '').toLowerCase();
         const matchQuery = !q || text.includes(q);
-        return matchSent && matchQuery;
+
+        // 카메라 매칭 (없으면 전체)
+        const cam = (S.camera || '').toLowerCase();
+        const model = (r.cameraModel || r.camera_model || '').toLowerCase();
+        const matchCamera = !cam || model === cam;
+
+        return matchSent && matchQuery && matchCamera;
       });
 
       const total = FILTERED_ROWS.length;
@@ -205,6 +249,7 @@
       document.getElementById('searchBtn')?.addEventListener('click', async () => {
         S.query = document.getElementById('q').value.trim();
         S.sentiment = document.getElementById('sent').value;
+        S.camera    = document.getElementById('camera').value;
         S.size = Number(document.getElementById('size').value || 20);
         S.page = 0;
         applyFilterAndPagination(); // ALL_ROWS는 그대로 두고 필터/페이지 재계산

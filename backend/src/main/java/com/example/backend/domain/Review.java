@@ -30,6 +30,8 @@ public class Review {
     @Column(name = "sentiment_model")
     private String sentimentModel;
 
+    @Column(name = "camera_model")
+    private String cameraModel;
 
     public String getSentimentLabel() { return sentimentLabel; }
     public void setSentimentLabel(String s) { this.sentimentLabel = s; }
@@ -39,6 +41,9 @@ public class Review {
 
     public String getSentimentModel() { return sentimentModel; }
     public void setSentimentModel(String s) { this.sentimentModel = s; }
+    
+    public String getCameraModel() { return cameraModel; }
+    public void setCameraModel(String cameraModel) { this.cameraModel = cameraModel; }
     
     // --- getters / setters (롬복 안 쓰는 버전) ---
     public Long getId() { return id; }
