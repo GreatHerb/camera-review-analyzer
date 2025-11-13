@@ -5,36 +5,33 @@ datapipe/crawl_youtube_comments.py
   cd datapipe
   source .venv/bin/activate
 
-  # 예시 1: 특정 카메라 기종 지정
+  # Canon EOS R8
   python crawl_youtube_comments.py \
-    --query "캐논 R8 리뷰" \
-    --camera-model "Canon EOS R8" \
-    --max-videos 5 \
-    --comments-per-video 50
+      --query "캐논 EOS R8 리뷰" \
+      --camera "Canon EOS R8" \
+      --max-videos 3 \
+      --comments-per-video 40
 
-  # 예시 2: 기종 모를 때 (기본값 'Unknown')
+  # Canon EOS R6 Mark II
   python crawl_youtube_comments.py \
-    --query "카메라 리뷰" \
-    --max-videos 5 \
-    --comments-per-video 50
+      --query "캐논 R6 마크2 리뷰" \
+      --camera "Canon EOS R6 Mark II" \
+      --max-videos 3 \
+      --comments-per-video 40
+
+  # Sony A7 IV
+  python crawl_youtube_comments.py \
+      --query "소니 A7M4 리뷰" \
+      --camera "Sony A7 IV" \
+      --max-videos 3 \
+      --comments-per-video 40
 
 설명:
- - query: 유튜브 검색어 (한국어 키워드)
- - camera-model: 이 스크립트가 수집하는 카메라 기종 이름 (예: "Canon EOS R8")
+ - query   : 유튜브 검색어 (한국어 키워드)
+ - camera  : 이 실행에서 수집하는 카메라 기종 이름(고정 문자열로 직접 지정)
  - max-videos: 검색해서 처리할 최대 비디오 수
  - comments-per-video: 비디오당 가져올 댓글 수(상위 댓글 기준)
  - DB: camera_reviews 데이터베이스의 review 테이블에 INSERT
-
-review 테이블 컬럼 (예상):
-  - id (serial)
-  - source (text)
-  - rating (int, nullable)
-  - content (text)
-  - created_at (timestamp without time zone, default now())
-  - sentiment_label (text, nullable)
-  - sentiment_score (numeric, nullable)
-  - sentiment_model (text, nullable)
-  - camera_model (varchar, nullable)  ← 이 스크립트에서 채우는 필드
 """
 
 import os
@@ -54,7 +51,7 @@ YOUTUBE_API_KEY = os.environ.get("YOUTUBE_API_KEY")
 if not YOUTUBE_API_KEY:
     raise RuntimeError("YOUTUBE_API_KEY 환경변수를 먼저 설정하세요.")
 
-# DB URL: 기존과 동일
+# DB URL
 DB_URL = os.environ.get(
     "DATABASE_URL",
     "postgresql+psycopg2://devuser:devpass@localhost:5432/camera_reviews"
@@ -153,17 +150,19 @@ def fetch_comments_for_video(video_id: str, max_comments: int = 200):
     return comments
 
 
-def insert_reviews(rows):
+def insert_reviews(rows, camera_model: str):
     """
     review 테이블에 INSERT
-
-    rows 항목 예:
-      {
-        "source": "youtube:VIDEO_ID",
-        "content": "...댓글 텍스트...",
-        "created_at": "2025-11-10T12:34:56Z",
-        "camera_model": "Canon EOS R8"
-      }
+    가정: review 테이블 컬럼
+      - id (serial)
+      - source (text)
+      - rating (int, nullable)
+      - content (text)
+      - created_at (timestamp without time zone, default now())
+      - sentiment_label (text, nullable)
+      - sentiment_score (numeric, nullable)
+      - sentiment_model (text, nullable)
+      - camera_model (text, nullable)
     """
     if not rows:
         return 0
@@ -182,7 +181,7 @@ def insert_reviews(rows):
                     "rating": None,
                     "content": r["content"],
                     "created_at": r["created_at"],
-                    "camera_model": r.get("camera_model", "Unknown"),
+                    "camera_model": camera_model,
                 })
                 inserted += 1
             except SQLAlchemyError as e:
@@ -192,7 +191,7 @@ def insert_reviews(rows):
 
 def main(args):
     print(f"🔍 검색어: {args.query}")
-    print(f"   카메라 기종: {args.camera_model}")
+    print(f"📷 카메라 기종: {args.camera}")
     print(f"   → 최대 비디오 {args.max_videos}개, 비디오당 댓글 {args.comments_per_video}개 수집 시도")
 
     video_ids = search_videos(args.query, max_results=args.max_videos)
@@ -210,10 +209,9 @@ def main(args):
                 "content": c["text"],
                 # publishedAt는 ISO8601 형식이라 PostgreSQL이 그대로 파싱 가능
                 "created_at": c["publishedAt"],
-                "camera_model": args.camera_model or "Unknown",
             })
 
-        inserted = insert_reviews(rows)
+        inserted = insert_reviews(rows, camera_model=args.camera)
         total_inserted += inserted
         time.sleep(0.2)  # rate limit 완화용
 
@@ -222,9 +220,8 @@ def main(args):
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
-    ap.add_argument("--query", required=True, help="유튜브 검색어 (예: '카메라 리뷰')")
-    ap.add_argument("--camera-model", required=False, default="Unknown",
-                    help="이 스크립트로 수집하는 카메라 기종 이름 (예: 'Canon EOS R8')")
+    ap.add_argument("--query", required=True, help="유튜브 검색어 (예: '캐논 EOS R8 리뷰')")
+    ap.add_argument("--camera", required=True, help="이 실행에서 수집할 카메라 기종 이름 (예: 'Canon EOS R8')")
     ap.add_argument("--max-videos", type=int, default=10, help="검색해서 처리할 최대 비디오 수")
     ap.add_argument("--comments-per-video", type=int, default=100, help="비디오당 최대 댓글 수")
     args = ap.parse_args()
