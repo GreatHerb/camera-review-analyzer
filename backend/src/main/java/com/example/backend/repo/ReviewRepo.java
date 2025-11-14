@@ -51,12 +51,28 @@ public interface ReviewRepo extends JpaRepository<Review, Long> {
     """)
     Long countByCamera(String camera);
 
-    // ====== 드롭다운용: 카메라 기종 목록 ======
+    // 카메라 기종 목록 (드롭다운용)
     @Query("""
         SELECT DISTINCT r.cameraModel
           FROM Review r
-         WHERE r.cameraModel IS NOT NULL AND r.cameraModel <> ''
-         ORDER BY r.cameraModel ASC
+         WHERE r.cameraModel IS NOT NULL
+           AND TRIM(r.cameraModel) <> ''
+         ORDER BY r.cameraModel
     """)
     List<String> findDistinctCameraModels();
+
+    // 카메라별 평균 감성 점수 랭킹 (리뷰 개수 minCount 이상인 것만)
+    @Query("""
+        SELECT r.cameraModel AS camera,
+               COUNT(r) AS cnt,
+               COALESCE(AVG(r.sentimentScore), 0)
+          FROM Review r
+         WHERE r.cameraModel IS NOT NULL
+           AND TRIM(r.cameraModel) <> ''
+           AND r.sentimentScore IS NOT NULL
+         GROUP BY r.cameraModel
+         HAVING COUNT(r) >= :minCount
+         ORDER BY COALESCE(AVG(r.sentimentScore), 0) DESC
+    """)
+    List<Object[]> findCameraRanking(int minCount);
 }

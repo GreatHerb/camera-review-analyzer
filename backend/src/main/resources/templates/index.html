@@ -26,14 +26,94 @@
     a.link { color:#93c5fd; text-decoration:none; }
     .kicker { color:#94a3b8; font-size:12px; margin-top:6px; }
 
-    .searchbar { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:4px; }
-    .input, .select { background:#0b1220; color:#e2e8f0; border:1px solid #334155; border-radius:10px; padding:8px 12px; font-size:14px; }
-    .input { flex:1 1 260px; }
-    .select { min-width:140px; }
-    .action { background:#1f2937; border:1px solid #334155; color:#cbd5e1; padding:8px 14px; border-radius:10px; cursor:pointer; }
+    /* 검색바: 높이/폭 안정화 */
+    .searchbar {
+      display:flex;
+      gap:8px;
+      flex-wrap:nowrap;
+      align-items:center;
+      margin-bottom:4px;
+    }
+    .input {
+      background:#0b1220;
+      color:#e2e8f0;
+      border:1px solid #334155;
+      border-radius:10px;
+      padding:8px 12px;
+      font-size:14px;
+      flex:1 1 auto;
+      min-width:240px;
+    }
+    .select {
+      background:#0b1220;
+      color:#e2e8f0;
+      border:1px solid #334155;
+      border-radius:10px;
+      padding:8px 12px;
+      font-size:14px;
+      flex:0 0 150px;
+      max-width:150px;
+      box-sizing:border-box;
+      white-space:nowrap;
+    }
+    .action {
+      background:#1f2937;
+      border:1px solid #334155;
+      color:#cbd5e1;
+      padding:8px 14px;
+      border-radius:10px;
+      cursor:pointer;
+      flex:0 0 auto;
+      white-space:nowrap;
+    }
+    .searchbar a.link {
+      flex:0 0 auto;
+      white-space:nowrap;
+    }
+
     .pager { display:flex; align-items:center; gap:10px; margin-top:12px; }
     .pager .action[disabled] { opacity:.5; cursor:not-allowed; }
     .small { font-size:12px; color:#94a3b8; }
+
+    .kw-list { display:flex; flex-wrap:wrap; gap:8px; margin-top:8px; }
+    .kw-chip { display:inline-flex; align-items:center; gap:6px; padding:4px 10px; border-radius:999px; font-size:12px; background:#020617; border:1px solid #1f2937; color:#e2e8f0; }
+    .kw-chip span.kw-freq { font-size:11px; color:#94a3b8; }
+
+    /* 날짜 컬럼: 한 줄 고정 */
+    .col-date {
+      white-space:nowrap;
+      width:110px;
+    }
+
+    /* 랭킹 카드 (오른쪽 플로팅 사이드 패널) */
+    .rank-card h2 { margin-bottom:4px; }
+    #rank-desc { font-size:11px; }
+    #top-reco { font-size:11px; }
+    #rank-tbl { font-size:13px; }
+    #rank-tbl th, #rank-tbl td { padding:6px 8px; }
+    #rank-tbl tbody tr { cursor:pointer; }
+    #rank-tbl tbody tr:hover { background:#020617; }
+
+    .rank-float {
+      position: fixed;
+      top: 160px;
+      right: 24px;
+      width: 260px;
+      z-index: 40;
+    }
+
+    /* 화면이 조금만 줄어들어도 본문 침범하지 않도록 기준을 1400px로 상향 */
+    @media (max-width: 1400px) {
+      .rank-float {
+        position: static;
+        width: auto;
+        max-width: 1100px;
+        margin: 0 auto 24px;
+        padding: 0 16px;
+      }
+      .rank-float .card { margin-top: 16px; }
+      .searchbar { flex-wrap:wrap; } /* 모바일/좁은 화면에서는 줄바꿈 허용 */
+    }
   </style>
 </head>
 <body>
@@ -61,8 +141,10 @@
     <!-- 검색/필터 바 -->
     <div class="card" style="margin-bottom:16px;">
       <div class="searchbar">
+        <!-- 키워드 검색 -->
         <input id="q" class="input" type="search" placeholder="키워드 검색 (예: 노이즈, 색감, AF, 배터리)">
 
+        <!-- 감성 필터 -->
         <select id="sent" class="select">
           <option value="">감성: 전체</option>
           <option value="positive">positive</option>
@@ -70,12 +152,17 @@
           <option value="negative">negative</option>
         </select>
 
-        <!-- 카메라 기종 필터 -->
-        <select id="camera" class="select">
-          <option value="">카메라: 전체</option>
-          <!-- 옵션은 JS에서 /api/cameras 응답으로 채움 -->
+        <!-- 카메라 회사 필터 -->
+        <select id="brand" class="select">
+          <option value="ALL">브랜드: 전체</option>
         </select>
 
+        <!-- 회사에 따라 바뀌는 카메라 기종 필터 -->
+        <select id="camera" class="select">
+          <option value="ALL">카메라: 전체</option>
+        </select>
+
+        <!-- 페이지당 개수 -->
         <select id="size" class="select">
           <option value="10">10개</option>
           <option value="20" selected>20개</option>
@@ -83,12 +170,23 @@
         </select>
 
         <button id="searchBtn" class="action">검색</button>
-        <a class="link" href="/swagger-ui.html" style="margin-left:auto;">Swagger UI ↗</a>
+        <a class="link" href="/swagger-ui.html">Swagger UI ↗</a>
+      </div>
+    </div>
+
+    <!-- 키워드 인사이트 카드 -->
+    <div class="card" style="margin-bottom:16px;">
+      <h2>키워드 인사이트</h2>
+      <div class="kicker" id="kw-title">
+        선택한 카메라/감성 조건에 대한 상위 키워드입니다.
+      </div>
+      <div id="keywords" class="kw-list">
+        <span class="muted">필터를 선택하거나 검색을 실행하면 키워드가 갱신됩니다.</span>
       </div>
     </div>
 
     <!-- 리뷰 테이블 -->
-    <div class="card">
+    <div class="card" style="margin-bottom:16px;">
       <h2>리뷰 목록</h2>
       <table id="tbl">
         <thead>
@@ -96,7 +194,7 @@
             <th>감성 점수</th>
             <th>감성</th>
             <th>내용</th>
-            <th>등록일</th>
+            <th class="col-date">등록일</th>
           </tr>
         </thead>
         <tbody></tbody>
@@ -112,20 +210,43 @@
     </div>
   </div>
 
+  <!-- 오른쪽 플로팅 사이드 랭킹 카드 -->
+  <aside class="rank-float">
+    <div class="card rank-card">
+      <h2>카메라 감성 점수 랭킹</h2>
+      <div class="kicker small" id="rank-desc">
+        리뷰가 충분히 있는 카메라를 평균 감성 점수 순으로 정렬했습니다. (Top 10)
+      </div>
+      <div id="top-reco" class="kicker small" style="margin:6px 0 10px;">
+        <!-- TOP 1 추천 문구 -->
+      </div>
+      <table id="rank-tbl">
+        <thead>
+        <tr>
+          <th style="width:34px;">#</th>
+          <th>카메라</th>
+          <th style="width:80px;">평균 점수</th>
+        </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+      <div class="muted" style="margin-top:6px;">
+        행을 클릭하면 해당 카메라로 필터링됩니다.
+      </div>
+    </div>
+  </aside>
+
   <script>
     const API = window.location.origin;
     let chart;
 
     // 검색 상태
-    let S = {
-      page: 0,
-      size: 20,
-      sentiment: '',
-      camera: '',
-      query: ''
-    };
+    let S = { page: 0, size: 20, sentiment: '', query: '', camera: 'ALL', brand: 'ALL' };
 
-    // 공통 fetch + JSON
+    // 카메라 브랜드/모델 맵
+    let CAMERA_BRAND_MAP = {};   // { Canon: [Canon EOS R8, ...], Sony: [...] }
+    let ALL_CAMERAS = [];
+
     const j = async (path) => {
       const url = path.startsWith('http') ? path : `${API}${path}`;
       const r = await fetch(url, { headers: { 'Accept': 'application/json' } });
@@ -147,28 +268,74 @@
       return `<span class="badge ${cls}">${label}</span>`;
     };
 
-    // 카메라 목록 불러오기 (/api/cameras → <select id="camera"> 옵션 생성)
-    async function loadCameras() {
-      const select = document.getElementById('camera');
-      if (!select) return;
+    function formatDate(iso) {
+      if (!iso) return '';
+      const s = iso.toString();
+      if (s.includes('T')) return s.split('T')[0];
+      return s.slice(0, 10);
+    }
+
+    function populateCameraByBrand(brand) {
+      const camEl = document.getElementById('camera');
+      if (!camEl) return;
+
+      camEl.innerHTML = '<option value="ALL">카메라: 전체</option>';
+
+      let models;
+      if (!brand || brand === 'ALL') {
+        models = ALL_CAMERAS;
+      } else {
+        models = CAMERA_BRAND_MAP[brand] || [];
+      }
+
+      models.forEach(name => {
+        const opt = document.createElement('option');
+        opt.value = name;
+        opt.textContent = name;
+        camEl.appendChild(opt);
+      });
+    }
+
+    async function loadCameraOptions() {
+      const brandEl = document.getElementById('brand');
+      const camEl   = document.getElementById('camera');
+      if (!brandEl || !camEl) return;
+
+      brandEl.innerHTML = '<option value="ALL">브랜드: 전체</option>';
+      camEl.innerHTML   = '<option value="ALL">카메라: 전체</option>';
+
       try {
-        const arr = await j('/api/cameras'); // ["Canon EOS R8", "Canon EOS R6", "Unknown", ...]
-        select.innerHTML = '<option value="">카메라: 전체</option>';
-        arr.forEach(m => {
-          const opt = document.createElement('option');
-          opt.value = m;
-          opt.textContent = m;
-          select.appendChild(opt);
+        const list = await j('/api/cameras');
+        if (!Array.isArray(list) || list.length === 0) {
+          return;
+        }
+
+        ALL_CAMERAS = [...list];
+
+        CAMERA_BRAND_MAP = {};
+        list.forEach(name => {
+          const brand = (name || '').trim().split(' ')[0] || '기타';
+          if (!CAMERA_BRAND_MAP[brand]) CAMERA_BRAND_MAP[brand] = [];
+          CAMERA_BRAND_MAP[brand].push(name);
         });
+
+        const brands = Object.keys(CAMERA_BRAND_MAP).sort();
+        brands.forEach(b => {
+          const opt = document.createElement('option');
+          opt.value = b;
+          opt.textContent = b;
+          brandEl.appendChild(opt);
+        });
+
+        populateCameraByBrand('ALL');
       } catch (e) {
-        console.error('카메라 목록 로딩 실패', e);
+        console.error('카메라/브랜드 목록 로딩 실패', e);
       }
     }
 
-    // 요약 통계 로딩 (선택된 카메라 기준)
     async function loadSummary() {
       const params = new URLSearchParams();
-      if (S.camera) params.set('camera', S.camera);
+      if (S.camera && S.camera !== 'ALL') params.set('camera', S.camera);
       const qs = params.toString() ? `?${params.toString()}` : '';
       const data = await j(`/api/stats/summary${qs}`);
 
@@ -182,17 +349,16 @@
       $count.textContent = String(count);
       $avg.textContent   = avg.toFixed(2);
 
-      if (S.camera) {
+      if (S.camera && S.camera !== 'ALL') {
         $desc.textContent = `선택된 카메라(${S.camera})에 대한 리뷰 개수`;
       } else {
         $desc.textContent = 'DB에 적재된 전체 리뷰 개수';
       }
     }
 
-    // 감성 분포 도넛 차트 (선택된 카메라 기준)
     async function loadSentimentChart() {
       const params = new URLSearchParams();
-      if (S.camera) params.set('camera', S.camera);
+      if (S.camera && S.camera !== 'ALL') params.set('camera', S.camera);
       const qs = params.toString() ? `?${params.toString()}` : '';
       const d = await j(`/api/stats/sentiment${qs}`);
 
@@ -217,23 +383,61 @@
       });
     }
 
-    // 리뷰 조회 (검색 + 페이지네이션 + 감성/카메라/키워드 필터)
+    // 🔍 항상 /api/reviews/search만 사용
     async function loadReviews() {
       const params = new URLSearchParams();
       if (S.sentiment) params.set('sentiment', S.sentiment);
-      if (S.camera)    params.set('camera', S.camera);
       if (S.query)     params.set('query', S.query);
+      if (S.camera && S.camera !== 'ALL') params.set('camera', S.camera);
       params.set('page', S.page);
       params.set('size', S.size);
 
       const resp = await j(`/api/reviews/search?${params.toString()}`);
       const rows = Array.isArray(resp) ? resp : (resp.content || []);
-      const page        = resp.number ?? 0;
-      const totalPages  = resp.totalPages ?? 1;
-      const totalElems  = resp.totalElements ?? rows.length;
-
       updateTable(rows);
-      updatePager(page, totalPages, totalElems);
+
+      const pageInfo      = resp.page ?? resp.number ?? S.page;
+      const totalPages    = resp.totalPages ?? 1;
+      const totalElements = resp.totalElements ?? rows.length;
+      updatePager(pageInfo, totalPages, totalElements);
+    }
+
+    async function loadKeywords() {
+      const params = new URLSearchParams();
+      if (S.camera && S.camera !== 'ALL') params.set('camera', S.camera);
+      if (S.sentiment) params.set('sentiment', S.sentiment);
+      params.set('limit', '20');
+
+      let title = '전체 카메라 / 전체 감성 기준 상위 키워드';
+      if (S.camera && S.camera !== 'ALL') {
+        title = `${S.camera} / `;
+        title += S.sentiment ? S.sentiment : '전체 감성';
+        title += ' 기준 상위 키워드';
+      } else if (S.sentiment) {
+        title = `전체 카메라 / ${S.sentiment} 기준 상위 키워드`;
+      }
+      document.getElementById('kw-title').textContent = title;
+
+      try {
+        const list = await j(`/api/stats/keywords?${params.toString()}`);
+        const box = document.getElementById('keywords');
+
+        if (!Array.isArray(list) || list.length === 0) {
+          box.innerHTML = '<span class="muted">해당 조건에 대한 키워드 데이터가 없습니다.</span>';
+          return;
+        }
+
+        box.innerHTML = list.map(k => `
+          <span class="kw-chip">
+            <span>${k.keyword}</span>
+            <span class="kw-freq">× ${k.freq}</span>
+          </span>
+        `).join('');
+      } catch (e) {
+        console.error('키워드 로딩 실패', e);
+        const box = document.getElementById('keywords');
+        box.innerHTML = '<span class="muted">키워드 로딩 중 오류가 발생했습니다.</span>';
+      }
     }
 
     function updateTable(rows) {
@@ -243,7 +447,7 @@
           <td>${(r.sentimentScore ?? '').toString()}</td>
           <td>${badge(r.sentimentLabel)}</td>
           <td>${(r.content || '').replace(/</g,'&lt;')}</td>
-          <td>${r.createdAt ?? ''}</td>
+          <td class="col-date">${formatDate(r.createdAt)}</td>
         </tr>
       `).join('');
     }
@@ -259,56 +463,157 @@
       info.textContent = `${(page || 0) + 1} / ${totalPages || 1} · 총 ${totalElements || 0}개`;
     }
 
-    // 🔁 공통: 현재 UI 상태 읽어서 S에 반영 후 전체 새로고침
-    async function applyFiltersAndRefresh() {
-      S.query     = document.getElementById('q').value.trim();
-      S.sentiment = document.getElementById('sent').value;
-      S.camera    = document.getElementById('camera').value;
-      S.size      = Number(document.getElementById('size').value || 20);
-      S.page      = 0;
+    async function loadRanking() {
+      const MIN_COUNT = 30;
+      const data = await j(`/api/stats/ranking?minCount=${MIN_COUNT}`);
 
-      await loadSummary();
-      await loadSentimentChart();
-      await loadReviews();
+      const tbody = document.querySelector('#rank-tbl tbody');
+      const topEl = document.getElementById('top-reco');
+
+      if (!Array.isArray(data) || data.length === 0) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="3" class="small">조건을 만족하는 카메라 데이터가 없습니다.</td>
+          </tr>`;
+        if (topEl) {
+          topEl.textContent = '충분한 리뷰가 있는 카메라가 없어서 추천을 표시할 수 없습니다.';
+        }
+        return;
+      }
+
+      const top10 = data.slice(0, 10);
+
+      tbody.innerHTML = top10.map((row, idx) => {
+        const cam = row.camera || '';
+        const avg = Number(row.avgSentiment ?? 0).toFixed(2);
+        return `
+          <tr data-camera="${cam}">
+            <td>${idx + 1}</td>
+            <td>${cam}</td>
+            <td>${avg}</td>
+          </tr>
+        `;
+      }).join('');
+
+      const first = top10[0];
+      const camName = first.camera || '';
+      const avg = Number(first.avgSentiment ?? 0).toFixed(2);
+      const cnt = first.count ?? 0;
+
+      if (topEl && camName) {
+        topEl.innerHTML =
+          `현재 수집된 리뷰 기준, 가장 긍정적인 카메라는 <strong>${camName}</strong> 입니다. `
+          + `(평균 감성 점수 ${avg}, 리뷰 ${cnt}개 기준)`;
+      }
+
+      tbody.querySelectorAll('tr[data-camera]').forEach(tr => {
+        tr.addEventListener('click', async () => {
+          const cam = tr.getAttribute('data-camera');
+          const brand = (cam || '').trim().split(' ')[0] || 'ALL';
+
+          const brandEl = document.getElementById('brand');
+          const camEl   = document.getElementById('camera');
+
+          if (brandEl && CAMERA_BRAND_MAP[brand]) {
+            brandEl.value = brand;
+          } else if (brandEl) {
+            brandEl.value = 'ALL';
+          }
+
+          populateCameraByBrand(brandEl ? brandEl.value : 'ALL');
+          if (camEl) {
+            camEl.value = cam;
+          }
+
+          S.brand  = brandEl ? brandEl.value : 'ALL';
+          S.camera = cam;
+          S.page   = 0;
+
+          await loadSummary();
+          await loadSentimentChart();
+          await loadReviews();
+          await loadKeywords();
+
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        });
+      });
     }
 
     function setupUI() {
-      // 🔍 검색 버튼 클릭 시 전체 새로고침
-      document.getElementById('searchBtn')?.addEventListener('click', () => {
-        applyFiltersAndRefresh().catch(err => {
-          console.error('검색 중 오류', err);
-          alert('검색 중 오류가 발생했습니다. (자세한 내용은 콘솔 참고)');
-        });
+      const qEl    = document.getElementById('q');
+      const sentEl = document.getElementById('sent');
+      const sizeEl = document.getElementById('size');
+      const brandEl= document.getElementById('brand');
+      const camEl  = document.getElementById('camera');
+      const searchBtn = document.getElementById('searchBtn');
+
+      searchBtn?.addEventListener('click', async () => {
+        S.query     = qEl?.value.trim() || '';
+        S.sentiment = sentEl?.value || '';
+        S.size      = Number(sizeEl?.value || 20);
+        S.brand     = brandEl?.value || 'ALL';
+        S.camera    = camEl?.value || 'ALL';
+        S.page = 0;
+        await loadSummary();
+        await loadSentimentChart();
+        await loadReviews();
+        await loadKeywords();
       });
 
-      // 📷 카메라 셀렉트 변경 시 → 검색 버튼 눌렀을 때와 동일한 동작
-      document.getElementById('camera')?.addEventListener('change', () => {
-        applyFiltersAndRefresh().catch(err => {
-          console.error('카메라 변경 중 오류', err);
-          // 카메라 변경은 굳이 alert 안 띄우고 조용히 콘솔에만 에러 남김
-        });
+      sentEl?.addEventListener('change', async () => {
+        S.sentiment = sentEl.value;
+        S.page = 0;
+        await loadSummary();
+        await loadSentimentChart();
+        await loadReviews();
+        await loadKeywords();
       });
 
-      // 페이지네이션
+      // ✅ 브랜드 변경 시: 통계/도넛은 그대로 두고, 리뷰 + 키워드만 새로고침
+      brandEl?.addEventListener('change', async () => {
+        S.brand = brandEl.value || 'ALL';
+        populateCameraByBrand(S.brand);
+        const camElInner = document.getElementById('camera');
+        if (camElInner) camElInner.value = 'ALL';
+        S.camera = 'ALL';
+        S.page = 0;
+        await loadReviews();
+        await loadKeywords();
+      });
+
+      camEl?.addEventListener('change', async () => {
+        S.camera = camEl.value || 'ALL';
+        S.page = 0;
+        await loadSummary();
+        await loadSentimentChart();
+        await loadReviews();
+        await loadKeywords();
+      });
+
       document.getElementById('prev')?.addEventListener('click', async () => {
         if (S.page > 0) {
           S.page -= 1;
           await loadReviews();
+          await loadKeywords();
         }
       });
 
       document.getElementById('next')?.addEventListener('click', async () => {
         S.page += 1;
         await loadReviews();
+        await loadKeywords();
       });
     }
 
     (async function init() {
-      await loadCameras();   // 카메라 목록 먼저
       setupUI();
-      await loadSummary();   // 초기: 전체 기준
-      await loadSentimentChart();
-      await loadReviews();
+      await loadCameraOptions();
+
+      try { await loadSummary(); }        catch(e){ console.error(e); alert('요약 통계 로딩 실패'); return; }
+      try { await loadSentimentChart(); } catch(e){ console.error(e); alert('감성 분포 로딩 실패'); return; }
+      try { await loadReviews(); }        catch(e){ console.error(e); alert('리뷰 로딩 실패'); return; }
+      try { await loadKeywords(); }       catch(e){ console.error(e); }
+      try { await loadRanking(); }        catch(e){ console.error(e); }
     })();
   </script>
 </body>

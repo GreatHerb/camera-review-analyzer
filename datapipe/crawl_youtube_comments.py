@@ -12,26 +12,11 @@ datapipe/crawl_youtube_comments.py
       --max-videos 3 \
       --comments-per-video 40
 
-  # Canon EOS R6 Mark II
-  python crawl_youtube_comments.py \
-      --query "캐논 R6 마크2 리뷰" \
-      --camera "Canon EOS R6 Mark II" \
-      --max-videos 3 \
-      --comments-per-video 40
-
-  # Sony A7 IV
-  python crawl_youtube_comments.py \
-      --query "소니 A7M4 리뷰" \
-      --camera "Sony A7 IV" \
-      --max-videos 3 \
-      --comments-per-video 40
-
 설명:
- - query   : 유튜브 검색어 (한국어 키워드)
- - camera  : 이 실행에서 수집하는 카메라 기종 이름(고정 문자열로 직접 지정)
- - max-videos: 검색해서 처리할 최대 비디오 수
- - comments-per-video: 비디오당 가져올 댓글 수(상위 댓글 기준)
- - DB: camera_reviews 데이터베이스의 review 테이블에 INSERT
+ - query            : 유튜브 검색어 (한국어 키워드)
+ - camera           : 이 실행에서 저장할 카메라 기종 이름
+ - max-videos       : 검색해서 처리할 최대 비디오 수
+ - comments-per-video : 비디오당 가져올 댓글 수
 """
 
 import os
@@ -153,16 +138,7 @@ def fetch_comments_for_video(video_id: str, max_comments: int = 200):
 def insert_reviews(rows, camera_model: str):
     """
     review 테이블에 INSERT
-    가정: review 테이블 컬럼
-      - id (serial)
-      - source (text)
-      - rating (int, nullable)
-      - content (text)
-      - created_at (timestamp without time zone, default now())
-      - sentiment_label (text, nullable)
-      - sentiment_score (numeric, nullable)
-      - sentiment_model (text, nullable)
-      - camera_model (text, nullable)
+    - UNIQUE (source, content) 제약을 활용해 중복 기록 방지
     """
     if not rows:
         return 0
@@ -170,6 +146,7 @@ def insert_reviews(rows, camera_model: str):
     sql = text("""
         INSERT INTO review (source, rating, content, created_at, camera_model)
         VALUES (:source, :rating, :content, :created_at, :camera_model)
+        ON CONFLICT (source, content) DO NOTHING
     """)
 
     inserted = 0
@@ -185,6 +162,7 @@ def insert_reviews(rows, camera_model: str):
                 })
                 inserted += 1
             except SQLAlchemyError as e:
+                # 이 경우는 중복이 아닌 다른 오류
                 print("[warn] DB insert error:", e)
     return inserted
 
@@ -207,13 +185,12 @@ def main(args):
             rows.append({
                 "source": f"youtube:{vid}",
                 "content": c["text"],
-                # publishedAt는 ISO8601 형식이라 PostgreSQL이 그대로 파싱 가능
-                "created_at": c["publishedAt"],
+                "created_at": c["publishedAt"],  # PostgreSQL이 ISO8601 자동 파싱
             })
 
         inserted = insert_reviews(rows, camera_model=args.camera)
         total_inserted += inserted
-        time.sleep(0.2)  # rate limit 완화용
+        time.sleep(0.2)  # rate-limit 완화
 
     print(f"✅ 총 삽입된 리뷰 개수: {total_inserted}")
 

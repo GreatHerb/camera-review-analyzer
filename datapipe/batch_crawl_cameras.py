@@ -1,8 +1,8 @@
 """
 datapipe/batch_crawl_cameras.py
 
-여기 파일 안의 CAMERA_JOBS 리스트만 수정해서
-여러 카메라 기종에 대해 한 번에 크롤링할 수 있는 스크립트.
+camera_list.json 파일에 정의된 여러 카메라 기종에 대해
+한 번에 크롤링할 수 있는 스크립트.
 
 사용 방법:
 
@@ -13,10 +13,30 @@ datapipe/batch_crawl_cameras.py
 사전 준비:
   - YOUTUBE_API_KEY 환경변수 설정 필요
   - crawl_youtube_comments.py 에서 DB 연결/트리거 등은 이미 세팅되어 있다고 가정
+  - datapipe/camera_list.json 파일 형식 예:
+
+    {
+      "cameras": [
+        {
+          "camera": "Canon EOS R6 Mark II",
+          "query": "캐논 R6 마크2 리뷰",
+          "max_videos": 3,
+          "comments_per_video": 40
+        },
+        {
+          "camera": "Sony A7 IV",
+          "query": "소니 A7M4 리뷰"
+        }
+      ]
+    }
+
+    → max_videos / comments_per_video 가 없으면 기본값 3 / 40 사용
 """
 
 from dataclasses import dataclass
 from typing import List
+from pathlib import Path
+import json
 
 # 기존 크롤러의 main 함수를 재사용
 from crawl_youtube_comments import main as crawl_main
@@ -30,36 +50,60 @@ class CameraJob:
     comments_per_video: int = 40  # 비디오당 최대 댓글 수
 
 
-# 🔧 여기만 수정해서 사용자가 원하는 카메라 목록 관리
-CAMERA_JOBS: List[CameraJob] = [
-    CameraJob(
-        camera="Canon EOS R8",
-        query="캐논 EOS R8 리뷰"
-    ),
-    CameraJob(
-        camera="Canon EOS R6 Mark II",
-        query="캐논 R6 마크2 리뷰"
-    ),
-    CameraJob(
-        camera="Sony A7 IV",
-        query="소니 A7M4 리뷰"
-    ),
-    # 👉 새로운 기종을 추가하고 싶으면 아래처럼 한 줄 더 추가하면 됩니다.
-    # CameraJob(camera="Fujifilm X-S20", query="후지 X-S20 리뷰"),
-]
+def load_camera_jobs() -> List[CameraJob]:
+    """
+    datapipe/camera_list.json 에서 카메라 목록을 읽어와 CameraJob 리스트로 변환.
+    """
+    path = Path(__file__).resolve().parent / "camera_list.json"
+    if not path.exists():
+        raise FileNotFoundError(
+            f"camera_list.json 파일을 찾을 수 없습니다: {path}\n"
+            f"예시 형식은 batch_crawl_cameras.py 상단 주석을 참고하세요."
+        )
+
+    with path.open("r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    raw_list = data.get("cameras", [])
+    jobs: List[CameraJob] = []
+
+    for item in raw_list:
+        camera = item.get("camera")
+        query = item.get("query")
+        if not camera or not query:
+            # 최소 camera, query 는 있어야 의미가 있으니 스킵
+            print(f"[warn] camera/query 둘 다 있어야 합니다. 스킵: {item}")
+            continue
+
+        max_videos = int(item.get("max_videos", 3))
+        comments_per_video = int(item.get("comments_per_video", 40))
+
+        jobs.append(
+            CameraJob(
+                camera=camera,
+                query=query,
+                max_videos=max_videos,
+                comments_per_video=comments_per_video,
+            )
+        )
+
+    return jobs
 
 
 def run_batch():
+    # JSON 에서 카메라 목록 불러오기
+    camera_jobs = load_camera_jobs()
+
     print("📸 배치 크롤링 시작")
-    print(f"총 대상 카메라 기종 수: {len(CAMERA_JOBS)}")
+    print(f"총 대상 카메라 기종 수: {len(camera_jobs)}")
     print("-" * 60)
 
-    for job in CAMERA_JOBS:
+    for job in camera_jobs:
         print(f"\n🚀 크롤링 시작: {job.camera}")
         print(f"   검색어: {job.query}")
         print(f"   max_videos={job.max_videos}, comments_per_video={job.comments_per_video}")
 
-        # crawl_youtube_comments.main 이 argparse.Namespace 비슷한걸 기대하므로,
+        # crawl_youtube_comments.main 이 argparse.Namespace와 비슷한 객체를 기대하므로,
         # 동일한 속성을 가진 간단한 객체를 만들어 전달
         class Args:
             pass

@@ -27,7 +27,7 @@ import subprocess
 from pathlib import Path
 from sqlalchemy import create_engine, text
 from batch_crawl_cameras import run_batch  # 배치 크롤러
-
+from analyze_keywords import main as analyze_keywords_main
 
 def run_labeling():
     """
@@ -96,6 +96,14 @@ def print_db_summary():
 
     print("📊 요약 통계 출력 완료\n")
 
+def run_keyword_analysis():
+    """
+    analyze_keywords.main() 을 호출해서
+    카메라/감성별 키워드 통계를 업데이트.
+    """
+    print("\n🧵 키워드 분석 시작 (analyze_keywords.main)")
+    analyze_keywords_main()
+    print("🧵 키워드 분석 완료\n")
 
 def main():
     print("===============================================")
@@ -111,7 +119,10 @@ def main():
     # 2) 감성 라벨링
     run_labeling()
 
-    # 3) 요약 통계 출력
+    # 3) 키워드 분석
+    run_keyword_analysis()
+
+    # 4) 요약 통계 출력
     print_db_summary()
 
     print("✅ FULL PIPELINE DONE")

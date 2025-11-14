@@ -1,0 +1,64 @@
+{
+  "cameras": [
+    {
+      "camera": "Canon EOS R6 Mark II",
+      "query": "캐논 R6 마크2 리뷰"
+    },
+    {
+      "camera": "Canon EOS R8",
+      "query": "캐논 EOS R8 리뷰"
+    },
+    {
+      "camera": "Canon EOS R7",
+      "query": "캐논 R7 리뷰"
+    },
+    {
+      "camera": "Canon EOS R10",
+      "query": "캐논 R10 리뷰"
+    },
+    {
+      "camera": "Canon EOS R5",
+      "query": "캐논 R5 리뷰"
+    },
+    {
+      "camera": "Sony A7 IV",
+      "query": "소니 A7M4 리뷰"
+    },
+    {
+      "camera": "Sony A7 III",
+      "query": "소니 A7M3 리뷰"
+    },
+    {
+      "camera": "Sony A6700",
+      "query": "소니 A6700 리뷰"
+    },
+    {
+      "camera": "Sony ZV-E10",
+      "query": "소니 ZV-E10 리뷰"
+    },
+    {
+      "camera": "Sony A7R V",
+      "query": "소니 A7RV 리뷰"
+    },
+    {
+      "camera": "Fujifilm X-S20",
+      "query": "후지 XS20 리뷰"
+    },
+    {
+      "camera": "Fujifilm X100V",
+      "query": "후지 X100V 리뷰"
+    },
+    {
+      "camera": "Fujifilm X-T5",
+      "query": "후지 XT5 리뷰"
+    },
+    {
+      "camera": "Nikon Z6 II",
+      "query": "니콘 Z6 II 리뷰"
+    },
+    {
+      "camera": "Nikon Z8",
+      "query": "니콘 Z8 리뷰"
+    }
+  ]
+}
