@@ -46,8 +46,8 @@ from crawl_youtube_comments import main as crawl_main
 class CameraJob:
     camera: str           # DB에 들어갈 camera_model 값
     query: str            # 유튜브 검색어
-    max_videos: int = 3   # 검색해서 처리할 최대 비디오 수
-    comments_per_video: int = 40  # 비디오당 최대 댓글 수
+    max_videos: int = 5   # 검색해서 처리할 최대 비디오 수
+    comments_per_video: int = 100  # 비디오당 최대 댓글 수
 
 
 def load_camera_jobs() -> List[CameraJob]:
@@ -75,8 +75,8 @@ def load_camera_jobs() -> List[CameraJob]:
             print(f"[warn] camera/query 둘 다 있어야 합니다. 스킵: {item}")
             continue
 
-        max_videos = int(item.get("max_videos", 3))
-        comments_per_video = int(item.get("comments_per_video", 40))
+        max_videos = int(item.get("max_videos", 8))
+        comments_per_video = int(item.get("comments_per_video", 80))
 
         jobs.append(
             CameraJob(

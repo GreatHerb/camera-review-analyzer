@@ -21,12 +21,20 @@
       "query": "캐논 R5 리뷰"
     },
     {
+      "camera": "Canon EOS R5 MARK II",
+      "query": "캐논 R5 마크2 리뷰"
+    },
+    {
       "camera": "Sony A7 IV",
       "query": "소니 A7M4 리뷰"
     },
     {
       "camera": "Sony A7 III",
       "query": "소니 A7M3 리뷰"
+    },
+    {
+      "camera": "Sony A7C II",
+      "query": "소니 A7C2 리뷰"
     },
     {
       "camera": "Sony A6700",
@@ -49,16 +57,44 @@
       "query": "후지 X100V 리뷰"
     },
     {
+      "camera": "Fujifilm X100VI",
+      "query": "후지 X100VI 리뷰"
+    },
+    {
       "camera": "Fujifilm X-T5",
       "query": "후지 XT5 리뷰"
+    },
+    {
+      "camera": "Fujifilm X-M5",
+      "query": "후지 XM5 리뷰"
+    },
+    {
+      "camera": "Fujifilm GFX100RF",
+      "query": "후지 GFX100RF 리뷰"
     },
     {
       "camera": "Nikon Z6 II",
       "query": "니콘 Z6 II 리뷰"
     },
     {
+      "camera": "Nikon Z6 III",
+      "query": "니콘 Z6 III 리뷰"
+    },
+    {
       "camera": "Nikon Z8",
       "query": "니콘 Z8 리뷰"
+    },
+    {
+      "camera": "Nikon Z5 II",
+      "query": "니콘 Z5 II 리뷰"
+    },
+    {
+      "camera": "Nikon Zf",
+      "query": "니콘 Zf 리뷰"
+    },
+    {
+      "camera": "Omsystem OM-3",
+      "query": "올림푸스 OM-3 리뷰"
     }
   ]
 }

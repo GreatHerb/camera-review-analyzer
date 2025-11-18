@@ -134,6 +134,59 @@ def fetch_comments_for_video(video_id: str, max_comments: int = 200):
 
     return comments
 
+def is_noise_comment(text: str) -> bool:
+    """
+    리뷰와 무관한 '노이즈 댓글'을 필터링하는 함수.
+    True  → noise로 간주 (DB INSERT 제외)
+    False → 실제 리뷰 가능성이 있음
+    
+    단계:
+      1) 너무 짧음
+      2) 인사/감사 패턴
+      3) 이모지/ㅋㅋ/ㅎㅎ 패턴
+      4) 카메라 관련 키워드 없음
+    """
+
+    if not text:
+        return True
+
+    t = text.strip().lower()
+
+    # ----- 1) 길이 기반 필터 (너무 짧은 댓글은 리뷰일 가능성 낮음)
+    if len(t) < 10:
+        return True
+    
+    # ----- 2) 인사/감사 패턴 필터
+    NOISE_PATTERNS = [
+        "잘 보고 갑니다", "잘봤습니다", "잘 봤습니다", 
+        "영상 감사합니다", "감사합니다", "감사해요",
+        "굿", "좋아요", "좋은 영상", "쿠팡",
+        "고맙습니다", "덕분에", "수고하셨습니다", "?"
+    ]
+    for pat in NOISE_PATTERNS:
+        if pat in t:
+            return True
+
+    # ----- 3) 거의 이모지/ㅋ/ㅎ 만 있는 댓글
+    # 예: "ㅋㅋㅋㅋㅋㅋ", "ㅎㅎㅎㅎ", "🙏🙏😍"
+    if re.fullmatch(r"[ㅋㅎㅠㅜ🙏❤️💜💙💚💛🤍🤎🖤⭐✨🔥\s]+", t):
+        return True
+
+    # ----- 4) 카메라 관련 키워드가 하나도 없으면 noise 가능성 ↑↑
+    CAMERA_KEYWORDS = [
+        "af", "오토포커스", "노이즈", "색감", "화이트밸런스",
+        "화질", "디테일", "iso", "셔터", "조리개",
+        "연사", "동영상", "발열", "손떨림", "ois", "렌즈",
+        "고감도", "dr", "다이내믹", "초점", "트래킹",
+        "센서", "바디", "프레임", "필름", "사진", "촬영",
+        "흔들림", "저조도", "후지", "캐논", "소니", "니콘",
+    ]
+
+    if not any(k in t for k in CAMERA_KEYWORDS):
+        return True
+
+    # noise 아님 → 리뷰일 가능성 있음
+    return False
 
 def insert_reviews(rows, camera_model: str):
     """
@@ -182,6 +235,12 @@ def main(args):
 
         rows = []
         for c in comments:
+            text_clean = c["text"]
+
+            # 노이즈 필터 적용
+            if is_noise_comment(text_clean):
+                continue
+
             rows.append({
                 "source": f"youtube:{vid}",
                 "content": c["text"],
