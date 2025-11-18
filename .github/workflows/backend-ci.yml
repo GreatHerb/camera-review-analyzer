@@ -1,18 +1,21 @@
-name: Backend CI
+name: backend-ci
 
 on:
   push:
     paths:
-      - "backend/**"
-      - ".github/workflows/backend-ci.yml"
+      - 'backend/**'
+      - '.github/workflows/backend-ci.yml'
   pull_request:
     paths:
-      - "backend/**"
-      - ".github/workflows/backend-ci.yml"
+      - 'backend/**'
 
 jobs:
-  build-backend:
+  build:
     runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: backend
 
     steps:
       - name: Checkout
@@ -21,13 +24,9 @@ jobs:
       - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:
-          distribution: "temurin"
-          java-version: "21"
-
-      - name: Make mvnw executable
-        working-directory: backend
-        run: chmod +x mvnw
+          distribution: 'temurin'
+          java-version: '21'
+          cache: 'maven'
 
       - name: Build backend (skip tests)
-        working-directory: backend
-        run: ./mvnw -q -B -DskipTests package
+        run: mvn -B -DskipTests package
