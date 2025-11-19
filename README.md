@@ -76,9 +76,9 @@
 
 ---
 
-## 6. DB 테이블 구조 (ERD 요약)
+## 6. DB 테이블 구조
 
-### **review**
+### **review - 원본 리뷰 + 감성 분석 결과**
 | 컬럼명 | 타입 | 설명 |
 |-------|------|------|
 | id | SERIAL PK | auto increment |
@@ -91,6 +91,13 @@
 | sentiment_score | FLOAT | 0~1 사이 감정 점수 |
 | model_name | TEXT | 감성 분석 모델 이름 |
 
+### 제약/인덱스
+- PRIMARY KEY (id)
+- UNIQUE (source, content)
+  - 같은 영상에서 동일한 내용의 댓글은 한 번만 저장(중복 크롤링 방지)
+- BEFORE INSERT 트리거 trg_reject_null
+  - content 또는 camera_model이 비어 있으면 삽입 자체를 막음(데이터 품질 관리)
+    
 ---
 
 ### **review_keyword_stats**
@@ -103,6 +110,12 @@
 | freq | INT | 등장 빈도 |
 | updated_at | TIMESTAMP | 업데이트 시간 |
 
+### 인덱스
+- idx_rks_cam_sent (camera_model, sentiment_label)
+  - 카메라 + 감성으로 빠르게 조회
+- idx_rks_keyword (keyword)
+  - 특정 키워드 기준 탐색/분석을 고려
+    
 ---
 
 ## 🐳 7. Docker 실행 방법
