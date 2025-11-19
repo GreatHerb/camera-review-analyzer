@@ -82,14 +82,14 @@
 | 컬럼명 | 타입 | 설명 |
 |-------|------|------|
 | id | SERIAL PK | auto increment |
-| source | TEXT | youtube:{videoId} |
-| rating | INTEGER NULL | 유튜브 평점(없으면 NULL) |
-| content | TEXT | 댓글 내용 |
+| source | TEXT | 데이터 출처 (youtube:{videoId}) |
+| rating | NUMERIC | 유튜브 평점(없으면 NULL) |
+| content | TEXT NOT NULL | 댓글 내용 |
 | created_at | TIMESTAMP | 댓글 생성일 |
-| camera_model | TEXT | 카메라 기종명 |
-| sentiment_label | TEXT | positive / negative / neutral |
-| sentiment_score | FLOAT | 0~1 사이 감정 점수 |
-| model_name | TEXT | 감성 분석 모델 이름 |
+| sentiment_label | VARCHAR | positive / negative / neutral |
+| sentiment_score | NUMERIC | 0~1 사이 감정 점수 |
+| sentiment_model | TEXT | 사용한 감성 분석 모델명 |
+| camera_model | VARCHAR | 카메라 기종명 |
 
 ### 제약/인덱스
 - PRIMARY KEY (id)
@@ -100,14 +100,14 @@
     
 ---
 
-### **review_keyword_stats**
+### **review_keyword_stats - 카메라/감성별 키워드 집계**
 | 컬럼명 | 타입 | 설명 |
 |--------|------|------|
-| id | SERIAL PK | auto increment |
-| camera_model | TEXT | 카메라 기종명 |
-| sentiment_label | TEXT | 감성 라벨 |
-| keyword | TEXT | 추출된 단어 |
-| freq | INT | 등장 빈도 |
+| id | BIGSERIAL PK | auto increment |
+| camera_model | TEXT NOT NULL | 카메라 기종명 |
+| sentiment_label | TEXT NOT NULL | 감성 라벨 |
+| keyword | TEXT NOT NULL | 추출된 단어 |
+| freq | INTEGER NOT NULL | 등장 빈도 |
 | updated_at | TIMESTAMP | 업데이트 시간 |
 
 ### 인덱스
