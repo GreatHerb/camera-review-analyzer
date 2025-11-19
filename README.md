@@ -1,10 +1,11 @@
 # Camera Review Analyzer
 
-유튜브 카메라 리뷰/댓글을 크롤링해서  
+유튜브 카메라 리뷰/댓글을 자동으로 수집하고
 **감성 분석(긍정/부정/중립)** + **키워드 분석**을 수행하고,  
-웹 대시보드에서 **카메라 기종별/브랜드별 인사이트**를 시각화하는 개인 프로젝트입니다.
+웹 대시보드에서 **카메라 기종별/브랜드별 인사이트**를 시각화하는 프로젝트입니다.
 
-> Spring Boot + PostgreSQL + Python 데이터 파이프라인 + Docker 전반을 연습하기 위한 프로젝트입니다.
+> Spring Boot · PostgreSQL · Python 데이터 파이프라인 · Docker  
+> 데이터 처리 흐름을 직접 구현해보기 위한 개인 프로젝트입니다.
 
 ---
 
@@ -14,12 +15,8 @@
 - 검색어(query) + 카메라 기종(camera_model)을 기반으로 유튜브 댓글 자동 수집
 - 동일 댓글 방지를 위해  
   **`UNIQUE(source, content)`** 제약 조건 활용
-- 카메라 목록은 `camera_list.json` 에 정의 → 여기에 추가만 하면 전체 파이프라인 자동 처리
-- 크롤링 파라미터 조절 가능  
-  - 비디오 최대 개수  
-  - 댓글 최대 개수
-
----
+- 카메라 모델은 `camera_list.json`에 추가만 하면 자동 확장
+- 최대 비디오 수 / 댓글 수 파라미터 조절 가능
 
 ### 2) 감성 분석 (Python)
 - HuggingFace 한국어 감성 모델  
@@ -27,34 +24,24 @@
 - 리뷰별 결과 저장
   - 감성 라벨: Positive / Neutral / Negative  
   - 감정 점수(0~1)  
-  - 모델 이름 저장  
+  - 사용된 모델명  
   - DB에 자동 반영
 
----
-
 ### 3) 키워드 분석 (Python)
-- 형태소 분석 기반 토큰 추출
-- **카메라 기종 + 감성 라벨별** 키워드 상위 N개 자동 저장
-- 결과는 `review_keyword_stats` 테이블로 관리
-- 대시보드에서 실시간 필터링 가능
+- 형태소 분석 → 토큰화 → 빈도 계산
+- **카메라 기종 + 감성 라벨** 단위로 키워드 Top-N 집계
+- `review_keyword_stats` 테이블에 저장
+
+### 4) 대시보드 기능
+- 총 리뷰 수  
+- 평균 감성 점수  
+- 감성 분포 도넛 차트  
+- 카메라 감성 Top 10  
+- 리뷰 테이블(필터 + 검색 + 페이지네이션)
 
 ---
 
-### 상단 카드
-- 총 리뷰 수
-- 평균 감성 점수
-- 감성 분포 도넛 차트
-
-### 리뷰 테이블
-- 감성 점수 / 라벨 / 내용 / 등록일
-- 실시간 검색 / 필터 / 페이지네이션
-
-### 카메라 감성 랭킹
-- 평균 감성 점수 상위 Top 10 노출
-
----
-
-## 5. 기술 스택
+## 2. 기술 스택
 
 ### Backend
 - Java 21
@@ -76,7 +63,7 @@
 
 ---
 
-## 6. DB 테이블 구조
+## 3. DB 테이블 구조
 
 ### **review - 원본 리뷰 + 감성 분석 결과**
 | 컬럼명 | 타입 | 설명 |
@@ -91,8 +78,7 @@
 | sentiment_model | TEXT | 사용한 감성 분석 모델명 |
 | camera_model | VARCHAR | 카메라 기종명 |
 
-### 제약/인덱스
-- PRIMARY KEY (id)
+### 제약 조건
 - UNIQUE (source, content)
   - 같은 영상에서 동일한 내용의 댓글은 한 번만 저장(중복 크롤링 방지)
 - BEFORE INSERT 트리거 trg_reject_null
@@ -118,7 +104,45 @@
     
 ---
 
-## 🐳 7. Docker 실행 방법
+### ERD
+
+```
+review
+ ├─ id (PK)
+ ├─ source (UNIQUE*)
+ ├─ content (UNIQUE*)
+ ├─ camera_model
+ ├─ sentiment_label
+ └─ sentiment_score
+      ↓ (camera_model + sentiment_label)
+review_keyword_stats
+ ├─ id (PK)
+ ├─ camera_model
+ ├─ sentiment_label
+ ├─ keyword
+ └─ freq
+```
+
+---
+
+### 데이터 파이프라인
+``` 
+YouTube API
+    ↓
+Python Crawler  (중복 제거 + 클렌징 + 트리거 기반 검증)
+    ↓
+PostgreSQL      (정규화 + 인덱스 + 제약조건 + 트리거)
+    ↓
+Python Worker   (감성 분석 + 키워드 통계 생성)
+    ↓
+PostgreSQL Update (Atomic Upsert)
+    ↓
+Spring Boot REST API  (JPA Query + 필터링)
+    ↓
+HTML Dashboard (시각화)
+```
+---
+## 🐳 4. Docker 실행 방법
 
 ### 1) 프로젝트 클론
 ```bash
