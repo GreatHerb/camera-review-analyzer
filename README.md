@@ -165,7 +165,7 @@ http://localhost:8081
 docker compose exec db psql -U devuser -d camera_reviews
 ```
 ---
-## 8. Python 파이프라인 실행
+## 5. Python 파이프라인 실행
 > 도커와 별개로 로컬에서 크롤링 + 감성분석 + 키워드 분석을 돌리고 싶을 때 실행
 
 ### 1) 가상환경 활성화
